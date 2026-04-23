@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const examples = ["AI 搜索", "AI 写作工具", "智能客服 SaaS"];
-const analysisSteps = ["识别玩家", "拆解定位", "提炼机会"];
+const analysisSteps = ["识别竞品", "拆解定位", "提炼机会"];
 
 export default function Home() {
   const router = useRouter();
@@ -38,7 +38,7 @@ export default function Home() {
           </div>
           <div className="hidden items-center gap-2 text-sm text-stone-500 sm:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-            Frontend prototype
+            Live API
           </div>
         </header>
 
@@ -51,7 +51,7 @@ export default function Home() {
               用一个关键词启动竞品分析。
             </h2>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-stone-600">
-              输入赛道或产品名，先得到一份清晰的分析框架：竞品类型、差异化维度、机会点与风险提示。
+              输入赛道或产品名，系统会调用 OpenAI API，返回竞品列表、功能对比、用户场景、差异分析和机会点。
             </p>
 
             <div className="mt-12 grid gap-4 border-y border-stone-300/70 py-6 sm:grid-cols-3">
@@ -122,9 +122,7 @@ export default function Home() {
               </form>
 
               <div className="mt-6">
-                <p className="text-sm font-medium text-stone-500">
-                  快速示例
-                </p>
+                <p className="text-sm font-medium text-stone-500">快速示例</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {examples.map((example) => (
                     <button
@@ -146,12 +144,12 @@ export default function Home() {
                 <p className="text-xs text-stone-500">模块</p>
               </div>
               <div>
-                <p className="text-lg font-semibold text-stone-950">3</p>
+                <p className="text-lg font-semibold text-stone-950">3+</p>
                 <p className="text-xs text-stone-500">竞品类型</p>
               </div>
               <div>
-                <p className="text-lg font-semibold text-stone-950">0</p>
-                <p className="text-xs text-stone-500">接口依赖</p>
+                <p className="text-lg font-semibold text-stone-950">1</p>
+                <p className="text-xs text-stone-500">API 接入</p>
               </div>
             </div>
           </section>
