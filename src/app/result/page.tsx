@@ -33,7 +33,7 @@ export default async function ResultPage({ searchParams }: ResultPageProps) {
             返回首页输入一个关键词，系统会调用 API 并生成结构化竞品分析。
           </p>
           <Link
-            href="/search"
+            href="/"
             className="mt-10 inline-flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-stone-950 px-5 text-base font-semibold text-white transition hover:bg-emerald-800"
           >
             <svg

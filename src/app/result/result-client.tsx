@@ -13,7 +13,7 @@ import PositioningMap from "@/components/PositioningMap";
 import RecommendedProductDirection from "@/components/RecommendedProductDirection";
 import ResultTableOfContents from "@/components/ResultTableOfContents";
 import SectionHeader from "@/components/SectionHeader";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type Competitor = CompetitorOverviewItem;
@@ -448,10 +448,23 @@ function ResearchDetails({ analysis }: { analysis: Analysis }) {
 }
 
 export default function ResultClient({ query }: ResultClientProps) {
+  const router = useRouter();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLeaving, setIsLeaving] = useState(false);
+
+  function handleReturnHome() {
+    if (isLeaving) {
+      return;
+    }
+
+    setIsLeaving(true);
+    window.setTimeout(() => {
+      router.push("/");
+    }, 180);
+  }
 
   useEffect(() => {
     let isActive = true;
@@ -508,12 +521,18 @@ export default function ResultClient({ query }: ResultClientProps) {
   }, [analysis]);
 
   return (
-    <main className="min-h-screen scroll-smooth bg-neutral-50 text-neutral-950">
+    <main
+      className={`min-h-screen scroll-smooth bg-neutral-50 text-neutral-950 transition duration-200 ease-out ${
+        isLeaving ? "translate-x-3 opacity-0" : "translate-x-0 opacity-100"
+      }`}
+    >
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
         <header className="border-b border-neutral-200 pb-8">
           <div className="flex items-center justify-between gap-4">
-            <Link
-              href="/search"
+            <button
+              type="button"
+              onClick={handleReturnHome}
+              aria-label="返回输入首页"
               className="inline-flex items-center gap-2 text-sm font-medium text-neutral-500 transition duration-200 ease-out hover:text-neutral-950"
             >
               <svg
@@ -528,7 +547,7 @@ export default function ResultClient({ query }: ResultClientProps) {
                 <path d="m11 18-6-6 6-6" />
               </svg>
               重新输入
-            </Link>
+            </button>
             <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
               {isLoading ? "Analyzing" : isDemo ? "Demo data" : "Live result"}
             </span>
