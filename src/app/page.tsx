@@ -1,5 +1,5 @@
-import SearchShell from "@/components/search/search-shell";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <SearchShell />;
+  redirect("/splash");
 }

@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import ExampleChips from "@/components/search/example-chips";
+import PageTransitionOverlay from "@/components/PageTransitionOverlay";
 
 const examples = [
   "智能客服 SaaS",
@@ -14,6 +15,7 @@ const examples = [
 export default function SearchInput() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const normalizedQuery = query.trim();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -23,11 +25,15 @@ export default function SearchInput() {
       return;
     }
 
-    router.push(`/result?q=${encodeURIComponent(normalizedQuery)}`);
+    setIsTransitioning(true);
+    window.setTimeout(() => {
+      router.push(`/result?q=${encodeURIComponent(normalizedQuery)}`);
+    }, 650);
   }
 
   return (
     <div className="mx-auto w-full max-w-3xl">
+      <PageTransitionOverlay visible={isTransitioning} />
       <form onSubmit={handleSubmit} className="w-full">
         <label htmlFor="research-query" className="sr-only">
           输入研究主题

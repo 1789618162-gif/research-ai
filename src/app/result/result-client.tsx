@@ -4,17 +4,21 @@ import CollapsibleSection from "@/components/CollapsibleSection";
 import CompetitorOverview, {
   type CompetitorOverviewItem,
 } from "@/components/CompetitorOverview";
-import AgentProgress from "@/components/AgentProgress";
+import AgentProgress, {
+  type AgentProgressStatus,
+} from "@/components/AgentProgress";
 import ExecutiveSummary from "@/components/ExecutiveSummary";
 import OpportunityInsights, {
   type OpportunityInsight,
 } from "@/components/OpportunityInsights";
+import PageTransitionOverlay from "@/components/PageTransitionOverlay";
 import PositioningMap from "@/components/PositioningMap";
 import RecommendedProductDirection from "@/components/RecommendedProductDirection";
 import ResultTableOfContents from "@/components/ResultTableOfContents";
+import ScrollReveal from "@/components/ScrollReveal";
 import SectionHeader from "@/components/SectionHeader";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 type Competitor = CompetitorOverviewItem;
 
@@ -55,6 +59,10 @@ type ResultClientProps = {
   query: string;
 };
 
+type ResultContentShellProps = {
+  children: ReactNode;
+};
+
 const requestCache = new Map<string, Promise<Analysis>>();
 
 const importanceLabels = {
@@ -68,6 +76,30 @@ const importanceStyles = {
   medium: "border-amber-200 bg-amber-50 text-amber-800",
   low: "border-neutral-200 bg-neutral-100 text-neutral-700",
 } satisfies Record<Analysis["featureComparison"][number]["importance"], string>;
+
+function ResultContentShell({ children }: ResultContentShellProps) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setIsVisible(true);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  return (
+    <div
+      className={`transition duration-500 ease-out ${
+        isVisible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
 
 const demoAnalysis: Analysis = {
   competitors: [
@@ -454,6 +486,10 @@ export default function ResultClient({ query }: ResultClientProps) {
   const [isDemo, setIsDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [showAgentProgress, setShowAgentProgress] = useState(true);
+  const [agentProgressStatus, setAgentProgressStatus] =
+    useState<AgentProgressStatus>("loading");
+  const [showResultsContent, setShowResultsContent] = useState(false);
 
   function handleReturnHome() {
     if (isLeaving) {
@@ -462,8 +498,8 @@ export default function ResultClient({ query }: ResultClientProps) {
 
     setIsLeaving(true);
     window.setTimeout(() => {
-      router.push("/");
-    }, 180);
+      router.push("/search");
+    }, 650);
   }
 
   useEffect(() => {
@@ -473,6 +509,10 @@ export default function ResultClient({ query }: ResultClientProps) {
       setIsLoading(true);
       setNotice(null);
       setIsDemo(false);
+      setIsLeaving(false);
+      setShowAgentProgress(true);
+      setShowResultsContent(false);
+      setAgentProgressStatus("loading");
 
       try {
         const result = await fetchAnalysis(query);
@@ -497,6 +537,7 @@ export default function ResultClient({ query }: ResultClientProps) {
       } finally {
         if (isActive) {
           setIsLoading(false);
+          setAgentProgressStatus("complete");
         }
       }
     }
@@ -521,11 +562,8 @@ export default function ResultClient({ query }: ResultClientProps) {
   }, [analysis]);
 
   return (
-    <main
-      className={`min-h-screen scroll-smooth bg-neutral-50 text-neutral-950 transition duration-200 ease-out ${
-        isLeaving ? "translate-x-3 opacity-0" : "translate-x-0 opacity-100"
-      }`}
-    >
+    <main className="min-h-screen scroll-smooth bg-neutral-50 text-neutral-950">
+      <PageTransitionOverlay visible={isLeaving} />
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
         <header className="border-b border-neutral-200 pb-8">
           <div className="flex items-center justify-between gap-4">
@@ -585,19 +623,6 @@ export default function ResultClient({ query }: ResultClientProps) {
           </div>
         </header>
 
-        {analysis && !isLoading && <ResultTableOfContents />}
-
-        {notice && (
-          <section className="pt-6">
-            <div className="border-y border-amber-200 bg-amber-50/80 px-5 py-4 text-amber-950">
-              <p className="text-sm font-semibold">当前为示例数据</p>
-              <p className="mt-2 text-sm leading-6">
-                真实 AI 分析暂不可用，页面已切换为 Demo 机会洞察。原因：{notice}
-              </p>
-            </div>
-          </section>
-        )}
-
         {isLoading && (
           <section className="py-16">
             <div className="border-y border-neutral-200 py-10">
@@ -610,36 +635,78 @@ export default function ResultClient({ query }: ResultClientProps) {
               <p className="mt-4 max-w-2xl leading-7 text-neutral-600">
                 完成后将展示核心竞品、功能对比和机会洞察。
               </p>
-              <div className="mt-8">
-                <AgentProgress isComplete={false} />
-              </div>
             </div>
           </section>
         )}
 
-        {analysis && !isLoading && (
-          <section className="space-y-14 py-10 lg:py-12">
-            <AgentProgress isComplete />
-            <ExecutiveSummary
-              query={query}
-              competitors={analysis.competitors}
-              opportunities={analysis.opportunities}
-              featureCount={analysis.featureComparison.length}
+        {showAgentProgress && (
+          <section className={isLoading ? "pb-16" : "pt-10"}>
+            <AgentProgress
+              key={query}
+              status={agentProgressStatus}
+              onDone={() => {
+                setShowAgentProgress(false);
+                setShowResultsContent(true);
+              }}
             />
-            <CompetitorOverview id="competitors" competitors={analysis.competitors} />
-            <PositioningMap competitors={analysis.competitors} />
-            <FeatureComparison features={analysis.featureComparison} />
-            <OpportunityInsights
-              id="opportunity-insights"
-              opportunities={analysis.opportunities}
-            />
-            <RecommendedProductDirection
-              competitors={analysis.competitors}
-              opportunities={analysis.opportunities}
-              userScenarios={analysis.userScenarios}
-            />
-            <ResearchDetails analysis={analysis} />
           </section>
+        )}
+
+        {analysis && !isLoading && showResultsContent && (
+          <ResultContentShell key={`results-${query}`}>
+            <ResultTableOfContents />
+
+            {notice && (
+              <section className="pt-6">
+                <div className="border-y border-amber-200 bg-amber-50/80 px-5 py-4 text-amber-950">
+                  <p className="text-sm font-semibold">当前为示例数据</p>
+                  <p className="mt-2 text-sm leading-6">
+                    真实 AI 分析暂不可用，页面已切换为 Demo
+                    机会洞察。原因：{notice}
+                  </p>
+                </div>
+              </section>
+            )}
+
+            <section className="space-y-14 py-10 lg:py-12">
+              <ScrollReveal delay={0}>
+                <ExecutiveSummary
+                  query={query}
+                  competitors={analysis.competitors}
+                  opportunities={analysis.opportunities}
+                  featureCount={analysis.featureComparison.length}
+                />
+              </ScrollReveal>
+              <ScrollReveal delay={80}>
+                <CompetitorOverview
+                  id="competitors"
+                  competitors={analysis.competitors}
+                />
+              </ScrollReveal>
+              <ScrollReveal delay={120}>
+                <PositioningMap competitors={analysis.competitors} />
+              </ScrollReveal>
+              <ScrollReveal delay={160}>
+                <FeatureComparison features={analysis.featureComparison} />
+              </ScrollReveal>
+              <ScrollReveal delay={200}>
+                <OpportunityInsights
+                  id="opportunity-insights"
+                  opportunities={analysis.opportunities}
+                />
+              </ScrollReveal>
+              <ScrollReveal delay={240}>
+                <RecommendedProductDirection
+                  competitors={analysis.competitors}
+                  opportunities={analysis.opportunities}
+                  userScenarios={analysis.userScenarios}
+                />
+              </ScrollReveal>
+              <ScrollReveal delay={280}>
+                <ResearchDetails analysis={analysis} />
+              </ScrollReveal>
+            </section>
+          </ResultContentShell>
         )}
       </section>
     </main>
