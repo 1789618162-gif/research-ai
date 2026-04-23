@@ -1,17 +1,25 @@
 "use client";
 
+import CollapsibleSection from "@/components/CollapsibleSection";
+import CompetitorOverview, {
+  type CompetitorOverviewItem,
+} from "@/components/CompetitorOverview";
+import AgentProgress from "@/components/AgentProgress";
+import ExecutiveSummary from "@/components/ExecutiveSummary";
+import OpportunityInsights, {
+  type OpportunityInsight,
+} from "@/components/OpportunityInsights";
+import PositioningMap from "@/components/PositioningMap";
+import RecommendedProductDirection from "@/components/RecommendedProductDirection";
+import ResultTableOfContents from "@/components/ResultTableOfContents";
+import SectionHeader from "@/components/SectionHeader";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+type Competitor = CompetitorOverviewItem;
+
 type Analysis = {
-  competitors: Array<{
-    name: string;
-    category: string;
-    positioning: string;
-    strengths: string[];
-    weaknesses: string[];
-    evidence: string[];
-  }>;
+  competitors: Competitor[];
   featureComparison: Array<{
     feature: string;
     importance: "high" | "medium" | "low";
@@ -33,13 +41,7 @@ type Analysis = {
     gaps: string[];
     implications: string;
   }>;
-  opportunities: Array<{
-    title: string;
-    rationale: string;
-    targetUsers: string[];
-    suggestedMoves: string[];
-    priority: "high" | "medium" | "low";
-  }>;
+  opportunities: OpportunityInsight[];
 };
 
 type ApiError = {
@@ -53,11 +55,7 @@ type ResultClientProps = {
   query: string;
 };
 
-const priorityLabels = {
-  high: "高优先级",
-  medium: "中优先级",
-  low: "低优先级",
-} satisfies Record<Analysis["opportunities"][number]["priority"], string>;
+const requestCache = new Map<string, Promise<Analysis>>();
 
 const importanceLabels = {
   high: "高",
@@ -65,17 +63,330 @@ const importanceLabels = {
   low: "低",
 } satisfies Record<Analysis["featureComparison"][number]["importance"], string>;
 
+const importanceStyles = {
+  high: "border-red-200 bg-red-50 text-red-800",
+  medium: "border-amber-200 bg-amber-50 text-amber-800",
+  low: "border-neutral-200 bg-neutral-100 text-neutral-700",
+} satisfies Record<Analysis["featureComparison"][number]["importance"], string>;
+
+const demoAnalysis: Analysis = {
+  competitors: [
+    {
+      name: "Notion AI",
+      product_name: "Notion AI",
+      category: "文档协作型 AI 写作",
+      positioning: "嵌入知识库和团队文档的写作助手。",
+      core_features: ["写作", "总结", "知识库结合"],
+      target_users: ["个人创作者", "团队协作用户"],
+      key_scenarios: ["文档写作", "知识管理", "会议总结"],
+      pricing: "约 10 USD / month",
+      workflow_depth: "medium",
+      automation_level: "medium",
+      closed_loop_capability: "medium",
+      agent_capability: "low",
+      collaboration_support: "high",
+      strengths: ["文档上下文强", "协作场景自然", "模板入口清晰"],
+      weaknesses: ["跨工具自动化弱", "复杂任务拆解不足"],
+      evidence: [
+        "示例数据：Notion AI 强在文档和知识库场景，但跨工具自动化和 Agent 执行较弱。",
+      ],
+    },
+    {
+      name: "ChatGPT",
+      product_name: "ChatGPT",
+      category: "通用 AI 助手",
+      positioning: "覆盖写作、分析、代码和通用问答的多能力入口。",
+      core_features: ["问答", "写作", "分析", "代码辅助"],
+      target_users: ["个人用户", "开发者", "知识工作者"],
+      key_scenarios: ["内容生成", "知识检索", "编程辅助"],
+      pricing: "免费 / Plus 订阅",
+      workflow_depth: "medium",
+      automation_level: "medium",
+      closed_loop_capability: "low",
+      agent_capability: "medium",
+      collaboration_support: "low",
+      strengths: ["能力覆盖广", "创作质量稳定", "对话式改稿自然"],
+      weaknesses: ["岗位流程不够行业化", "团队协作和交付闭环较弱"],
+      evidence: [
+        "示例数据：ChatGPT 能生成内容，但面向团队流程和结构化交付仍需要人工推进。",
+      ],
+    },
+    {
+      name: "Copy.ai",
+      product_name: "Copy.ai",
+      category: "营销写作工具",
+      positioning: "面向营销团队的内容生成和文案模板平台。",
+      core_features: ["营销文案", "模板生成", "批量改写"],
+      target_users: ["市场团队", "增长团队", "销售团队"],
+      key_scenarios: ["广告文案", "邮件营销", "销售触达"],
+      pricing: "免费 / 付费订阅",
+      workflow_depth: "medium",
+      automation_level: "medium",
+      closed_loop_capability: "medium",
+      agent_capability: "low",
+      collaboration_support: "medium",
+      strengths: ["营销模板丰富", "批量生成方便", "上手成本低"],
+      weaknesses: ["深度研究弱", "长链路内容策略不足"],
+      evidence: [
+        "示例数据：Copy.ai 覆盖营销文案，但从研究到发布的链路支持有限。",
+      ],
+    },
+  ],
+  featureComparison: [
+    {
+      feature: "长文内容规划",
+      importance: "high",
+      comparison: [
+        { competitor: "Notion AI", performance: "中", notes: "依赖文档结构" },
+        {
+          competitor: "ChatGPT",
+          performance: "高",
+          notes: "规划强但需要人工管理版本",
+        },
+        {
+          competitor: "Copy.ai",
+          performance: "中",
+          notes: "更偏短文案模板",
+        },
+      ],
+    },
+    {
+      feature: "素材研究",
+      importance: "high",
+      comparison: [
+        { competitor: "Notion AI", performance: "中", notes: "偏内部知识" },
+        {
+          competitor: "ChatGPT",
+          performance: "中",
+          notes: "需要外部资料配合",
+        },
+        { competitor: "Copy.ai", performance: "低", notes: "研究链路较浅" },
+      ],
+    },
+    {
+      feature: "跨平台发布准备",
+      importance: "medium",
+      comparison: [
+        { competitor: "Notion AI", performance: "低", notes: "主要停留在文档内" },
+        { competitor: "ChatGPT", performance: "低", notes: "需要人工复制分发" },
+        {
+          competitor: "Copy.ai",
+          performance: "中",
+          notes: "营销场景集成较多",
+        },
+      ],
+    },
+  ],
+  userScenarios: [
+    {
+      scenario: "从选题到初稿",
+      userType: "内容运营",
+      painPoints: ["选题研究分散", "初稿结构反复调整"],
+      currentAlternatives: ["搜索资料", "ChatGPT 起草", "人工整理大纲"],
+    },
+    {
+      scenario: "长文改写成多平台内容",
+      userType: "新媒体编辑",
+      painPoints: ["平台口吻不同", "重复改写耗时"],
+      currentAlternatives: ["手工改写", "多个模板工具"],
+    },
+  ],
+  differentiationAnalysis: [
+    {
+      dimension: "流程闭环",
+      currentPattern: "多数工具停留在生成内容。",
+      gaps: ["缺少从研究、写作、审批到发布的闭环"],
+      implications: "可以用 Agent 串起完整写作任务链。",
+    },
+    {
+      dimension: "岗位化深度",
+      currentPattern: "通用助手强，岗位流程弱。",
+      gaps: ["内容运营、市场、销售话术缺少专属流程"],
+      implications: "垂直工作流比单点生成更容易差异化。",
+    },
+  ],
+  opportunities: [
+    {
+      opportunity_title: "面向内容运营的选题到初稿 Agent",
+      gap_type: "流程",
+      evidence:
+        "Notion AI 的 agent_capability=low，ChatGPT 的 collaboration_support=low，Copy.ai 的 workflow_depth=medium，三者都未完整覆盖选题研究到初稿交付。",
+      unmet_need:
+        "内容运营需要把资料收集、角度判断、大纲生成和初稿写作压缩成一个连续流程。",
+      why_now:
+        "长文本模型和工具调用能力已经能承担资料整理、结构规划和多轮改稿。",
+      product_direction:
+        "构建写作 Agent，将选题、资料摘要、大纲、初稿和改稿建议串成任务流。",
+      priority: "High",
+      priority_reason:
+        "用户频次高、节省时间明显，并且适合作为 MVP 单场景切入。",
+      mvp_idea: "先支持输入主题后生成资料清单、大纲和一版公众号初稿。",
+      user_value: 9,
+      differentiation: 8,
+      feasibility: 8,
+      agent_fit: 9,
+      total_score: 34,
+      recommended_priority: "High",
+      recommendation_reason:
+        "用户价值和 Agent 匹配度都很高，且可以用单一写作工作流快速验证 MVP。",
+    },
+    {
+      opportunity_title: "一键多平台改写与发布准备",
+      gap_type: "场景",
+      evidence:
+        "ChatGPT 能改写但 collaboration_support=low，Notion AI 停留在文档场景，Copy.ai 更偏广告文案，跨平台内容适配覆盖不足。",
+      unmet_need:
+        "编辑希望把一篇长文快速拆成小红书、公众号、LinkedIn 等不同版本。",
+      why_now:
+        "模型能识别语气、长度、标题和 CTA 差异，适合做平台化变体生成。",
+      product_direction:
+        "提供多平台内容适配器，自动生成标题、正文、摘要、标签和发布检查项。",
+      priority: "High",
+      priority_reason: "价值直观、结果可立即验收，差异化强。",
+      mvp_idea: "先支持将一篇长文改写成 3 个平台版本，并给出修改原因。",
+      user_value: 8,
+      differentiation: 8,
+      feasibility: 9,
+      agent_fit: 8,
+      total_score: 33,
+      recommended_priority: "High",
+      recommendation_reason:
+        "结果可直接验收，跨平台适配痛点明确，适合作为高优先级切入点。",
+    },
+    {
+      opportunity_title: "品牌语气和合规检查 Agent",
+      gap_type: "agent",
+      evidence:
+        "Notion AI 的 collaboration_support=high 但 agent_capability=low，ChatGPT 缺少稳定品牌规则记忆，Copy.ai 更强调生成，品牌一致性审查不足。",
+      unmet_need:
+        "团队需要在发布前自动检查品牌语气、禁用词、事实风险和合规问题。",
+      why_now:
+        "RAG 和规则化检查可以结合模型判断，降低人工审核成本。",
+      product_direction:
+        "建立品牌规则库，让 Agent 对内容逐段标注风险并给出修订建议。",
+      priority: "Medium",
+      priority_reason:
+        "企业价值高，但需要配置品牌规则，MVP 复杂度中等。",
+      mvp_idea: "先支持上传品牌规范，检查一篇文章并输出风险清单。",
+      user_value: 7,
+      differentiation: 7,
+      feasibility: 6,
+      agent_fit: 8,
+      total_score: 28,
+      recommended_priority: "Medium",
+      recommendation_reason:
+        "企业价值明确，Agent 匹配度较高，但需要品牌规则配置，MVP 落地复杂度中等。",
+    },
+  ],
+};
+
+function createDemoAnalysis(query: string) {
+  return {
+    ...demoAnalysis,
+    competitors: demoAnalysis.competitors.map((competitor) => ({
+      ...competitor,
+      evidence: competitor.evidence.map((item) => `${item}（查询：${query}）`),
+    })),
+  };
+}
+
 function getErrorMessage(error: ApiError) {
   if (error.error?.code === "OPENAI_CONFIG_MISSING") {
     return "还没有配置 OPENAI_API_KEY。请在 .env.local 中配置后重启开发服务器。";
   }
 
-  return error.error?.message ?? "分析失败，请稍后重试。";
+  return error.error?.message ?? "真实 AI 分析暂不可用，已切换为示例数据。";
 }
 
-function List({ items }: { items: string[] }) {
+function fetchAnalysis(query: string) {
+  const cached = requestCache.get(query);
+
+  if (cached) {
+    return cached;
+  }
+
+  const request = fetch("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  })
+    .then(async (response) => {
+      const payload = (await response.json()) as Analysis | ApiError;
+
+      if (!response.ok) {
+        throw new Error(getErrorMessage(payload as ApiError));
+      }
+
+      return payload as Analysis;
+    })
+    .catch((error) => {
+      requestCache.delete(query);
+      throw error;
+    });
+
+  requestCache.set(query, request);
+  return request;
+}
+
+function FeatureComparison({
+  features,
+}: {
+  features: Analysis["featureComparison"];
+}) {
   return (
-    <ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600">
+    <section id="feature-comparison" className="scroll-mt-24">
+      <SectionHeader
+        eyebrow="Feature Comparison"
+        title="功能对比"
+        description="快速定位能力差异和优先补强项"
+      />
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        {features.map((feature) => (
+          <article
+            key={feature.feature}
+            className="rounded-md border border-neutral-200 bg-white/60 p-5 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-neutral-400 hover:bg-white hover:shadow-sm"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-semibold text-neutral-950">
+                {feature.feature}
+              </h3>
+              <span
+                className={`rounded-md border px-2 py-1 text-xs font-semibold ${importanceStyles[feature.importance]}`}
+              >
+                {importanceLabels[feature.importance]}
+              </span>
+            </div>
+            <div className="mt-5 divide-y divide-neutral-100">
+              {feature.comparison.map((item) => (
+                <div
+                  key={`${feature.feature}-${item.competitor}`}
+                  className="py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-neutral-900">
+                      {item.competitor}
+                    </p>
+                    <p className="text-sm text-neutral-500">
+                      {item.performance}
+                    </p>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-neutral-600">
+                    {item.notes}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DetailList({ items }: { items: string[] }) {
+  return (
+    <ul className="mt-3 space-y-2 text-sm leading-6 text-neutral-600">
       {items.map((item) => (
         <li key={item} className="flex gap-2">
           <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-700" />
@@ -86,52 +397,102 @@ function List({ items }: { items: string[] }) {
   );
 }
 
+function ResearchDetails({ analysis }: { analysis: Analysis }) {
+  return (
+    <CollapsibleSection
+      id="research-details"
+      title="研究详情"
+      eyebrow="Supporting analysis"
+      description="展开查看用户场景和差异分析"
+    >
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div>
+          <h3 className="text-xl font-semibold text-neutral-950">用户场景</h3>
+          <div className="mt-4 divide-y divide-neutral-200">
+            {analysis.userScenarios.map((scenario) => (
+              <article key={scenario.scenario} className="py-5 first:pt-0">
+                <p className="text-sm font-medium text-emerald-800">
+                  {scenario.userType}
+                </p>
+                <h4 className="mt-2 text-lg font-semibold text-neutral-950">
+                  {scenario.scenario}
+                </h4>
+                <DetailList items={scenario.painPoints} />
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-xl font-semibold text-neutral-950">差异分析</h3>
+          <div className="mt-4 divide-y divide-neutral-200">
+            {analysis.differentiationAnalysis.map((item) => (
+              <article key={item.dimension} className="py-5 first:pt-0">
+                <h4 className="text-lg font-semibold text-neutral-950">
+                  {item.dimension}
+                </h4>
+                <p className="mt-2 text-sm leading-6 text-neutral-700">
+                  {item.currentPattern}
+                </p>
+                <DetailList items={item.gaps} />
+                <p className="mt-3 text-sm leading-6 text-neutral-600">
+                  {item.implications}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+    </CollapsibleSection>
+  );
+}
+
 export default function ResultClient({ query }: ResultClientProps) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const controller = new AbortController();
+    let isActive = true;
 
     async function analyze() {
       setIsLoading(true);
-      setError(null);
-      setAnalysis(null);
+      setNotice(null);
+      setIsDemo(false);
 
       try {
-        const response = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query }),
-          signal: controller.signal,
-        });
+        const result = await fetchAnalysis(query);
 
-        const payload = (await response.json()) as Analysis | ApiError;
-
-        if (!response.ok) {
-          setError(getErrorMessage(payload as ApiError));
+        if (!isActive) {
           return;
         }
 
-        setAnalysis(payload as Analysis);
+        setAnalysis(result);
       } catch (requestError) {
-        if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
-        ) {
+        if (!isActive) {
           return;
         }
 
-        setError("网络请求失败，请确认开发服务器正在运行。");
+        setAnalysis(createDemoAnalysis(query));
+        setIsDemo(true);
+        setNotice(
+          requestError instanceof Error
+            ? requestError.message
+            : "真实 AI 分析暂不可用，已切换为示例数据。",
+        );
       } finally {
-        setIsLoading(false);
+        if (isActive) {
+          setIsLoading(false);
+        }
       }
     }
 
     analyze();
 
-    return () => controller.abort();
+    return () => {
+      isActive = false;
+    };
   }, [query]);
 
   const summary = useMemo(() => {
@@ -147,13 +508,13 @@ export default function ResultClient({ query }: ResultClientProps) {
   }, [analysis]);
 
   return (
-    <main className="min-h-screen bg-stone-100 text-stone-950">
+    <main className="min-h-screen scroll-smooth bg-neutral-50 text-neutral-950">
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
-        <header className="border-b border-stone-300/70 pb-8">
+        <header className="border-b border-neutral-200 pb-8">
           <div className="flex items-center justify-between gap-4">
             <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-sm font-medium text-stone-500 transition hover:text-stone-950"
+              href="/search"
+              className="inline-flex items-center gap-2 text-sm font-medium text-neutral-500 transition duration-200 ease-out hover:text-neutral-950"
             >
               <svg
                 aria-hidden="true"
@@ -168,220 +529,97 @@ export default function ResultClient({ query }: ResultClientProps) {
               </svg>
               重新输入
             </Link>
-            <span className="rounded-md border border-stone-300 bg-white/70 px-3 py-1.5 text-sm font-medium text-stone-600">
-              {isLoading ? "Analyzing" : analysis ? "Live result" : "Action needed"}
+            <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
+              {isLoading ? "Analyzing" : isDemo ? "Demo data" : "Live result"}
             </span>
           </div>
 
-          <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_340px] lg:items-end">
+          <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
             <div>
-              <p className="text-sm font-medium uppercase text-emerald-800">
+              <p className="text-sm font-medium uppercase tracking-normal text-emerald-800">
                 Analysis result
               </p>
-              <h1 className="mt-4 max-w-4xl text-5xl font-semibold tracking-normal sm:text-6xl">
+              <h1 className="mt-3 max-w-4xl text-5xl font-semibold tracking-normal sm:text-6xl">
                 {query}
               </h1>
-              <p className="mt-5 max-w-2xl text-lg leading-8 text-stone-600">
-                页面会调用 <code className="font-mono">POST /api/analyze</code>{" "}
-                获取结构化竞品分析，包含竞品、功能、场景、差异和机会点。
+              <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600">
+                聚焦核心竞品与可执行机会，详细研究信息已收进折叠区。
               </p>
             </div>
 
-            <div className="grid grid-cols-3 divide-x divide-stone-300/70 border-y border-stone-300/70 py-5 text-center lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-y-0 lg:border-l lg:py-0 lg:pl-6 lg:text-left">
+            <div className="grid grid-cols-3 divide-x divide-neutral-200 border-y border-neutral-200 py-4 text-center lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-y-0 lg:border-l lg:py-0 lg:pl-6 lg:text-left">
               <div className="py-0 lg:py-4">
                 <p className="text-2xl font-semibold">{summary.competitors}</p>
-                <p className="mt-1 text-sm text-stone-500">竞品数量</p>
+                <p className="mt-1 text-sm text-neutral-500">竞品</p>
               </div>
               <div className="py-0 lg:py-4">
                 <p className="text-2xl font-semibold">{summary.features}</p>
-                <p className="mt-1 text-sm text-stone-500">功能维度</p>
+                <p className="mt-1 text-sm text-neutral-500">功能</p>
               </div>
               <div className="py-0 lg:py-4">
                 <p className="text-2xl font-semibold">
                   {summary.opportunities}
                 </p>
-                <p className="mt-1 text-sm text-stone-500">机会点</p>
+                <p className="mt-1 text-sm text-neutral-500">机会</p>
               </div>
             </div>
           </div>
         </header>
 
+        {analysis && !isLoading && <ResultTableOfContents />}
+
+        {notice && (
+          <section className="pt-6">
+            <div className="border-y border-amber-200 bg-amber-50/80 px-5 py-4 text-amber-950">
+              <p className="text-sm font-semibold">当前为示例数据</p>
+              <p className="mt-2 text-sm leading-6">
+                真实 AI 分析暂不可用，页面已切换为 Demo 机会洞察。原因：{notice}
+              </p>
+            </div>
+          </section>
+        )}
+
         {isLoading && (
           <section className="py-16">
-            <div className="border-y border-stone-300/70 py-10">
-              <p className="text-sm font-medium uppercase text-emerald-800">
+            <div className="border-y border-neutral-200 py-10">
+              <p className="text-sm font-medium uppercase tracking-normal text-emerald-800">
                 Calling OpenAI
               </p>
-              <h2 className="mt-4 text-3xl font-semibold">正在分析公开信息...</h2>
-              <p className="mt-4 max-w-2xl leading-7 text-stone-600">
-                开启 Web search 后通常需要多等几秒。完成后这里会替换为真实分析结果。
+              <h2 className="mt-4 text-3xl font-semibold">
+                正在生成分析...
+              </h2>
+              <p className="mt-4 max-w-2xl leading-7 text-neutral-600">
+                完成后将展示核心竞品、功能对比和机会洞察。
               </p>
-            </div>
-          </section>
-        )}
-
-        {error && (
-          <section className="py-16">
-            <div className="border-y border-red-200 bg-red-50/70 px-5 py-10 text-red-950">
-              <p className="text-sm font-medium uppercase text-red-700">
-                Request failed
-              </p>
-              <h2 className="mt-4 text-3xl font-semibold">暂时无法生成分析</h2>
-              <p className="mt-4 max-w-2xl leading-7">{error}</p>
-            </div>
-          </section>
-        )}
-
-        {analysis && (
-          <section className="grid gap-12 py-10 lg:grid-cols-[360px_1fr] lg:py-12">
-            <aside>
-              <div className="sticky top-6">
-                <p className="text-sm font-medium text-stone-500">核心竞品</p>
-                <div className="mt-5 divide-y divide-stone-300/70 border-y border-stone-300/70">
-                  {analysis.competitors.map((item, index) => (
-                    <article key={item.name} className="py-6">
-                      <div className="flex items-start gap-4">
-                        <span className="font-mono text-sm text-stone-400">
-                          0{index + 1}
-                        </span>
-                        <div>
-                          <p className="text-xs font-medium uppercase text-emerald-800">
-                            {item.category}
-                          </p>
-                          <h2 className="mt-2 text-lg font-semibold text-stone-950">
-                            {item.name}
-                          </h2>
-                          <p className="mt-3 text-base leading-7 text-stone-600">
-                            {item.positioning}
-                          </p>
-                          <List items={item.evidence} />
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
+              <div className="mt-8">
+                <AgentProgress isComplete={false} />
               </div>
-            </aside>
+            </div>
+          </section>
+        )}
 
-            <section className="space-y-12">
-              <section>
-                <div className="border-b border-stone-300/70 pb-5">
-                  <p className="text-sm font-medium text-stone-500">功能对比</p>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-normal text-stone-950">
-                    Feature comparison
-                  </h2>
-                </div>
-                <div className="divide-y divide-stone-300/70">
-                  {analysis.featureComparison.map((feature) => (
-                    <article key={feature.feature} className="py-7">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-2xl font-semibold text-stone-950">
-                          {feature.feature}
-                        </h3>
-                        <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
-                          重要性：{importanceLabels[feature.importance]}
-                        </span>
-                      </div>
-                      <div className="mt-5 grid gap-4 md:grid-cols-2">
-                        {feature.comparison.map((item) => (
-                          <div
-                            key={`${feature.feature}-${item.competitor}`}
-                            className="rounded-md border border-stone-300 bg-white/70 p-4"
-                          >
-                            <h4 className="font-semibold text-stone-950">
-                              {item.competitor}
-                            </h4>
-                            <p className="mt-2 text-sm font-medium text-stone-700">
-                              {item.performance}
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-stone-600">
-                              {item.notes}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section className="grid gap-8 xl:grid-cols-2">
-                <div>
-                  <div className="border-b border-stone-300/70 pb-5">
-                    <p className="text-sm font-medium text-stone-500">用户场景</p>
-                    <h2 className="mt-2 text-3xl font-semibold tracking-normal">
-                      User scenarios
-                    </h2>
-                  </div>
-                  <div className="divide-y divide-stone-300/70">
-                    {analysis.userScenarios.map((scenario) => (
-                      <article key={scenario.scenario} className="py-6">
-                        <p className="text-sm font-medium text-emerald-800">
-                          {scenario.userType}
-                        </p>
-                        <h3 className="mt-2 text-xl font-semibold">
-                          {scenario.scenario}
-                        </h3>
-                        <List items={scenario.painPoints} />
-                      </article>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="border-b border-stone-300/70 pb-5">
-                    <p className="text-sm font-medium text-stone-500">机会点</p>
-                    <h2 className="mt-2 text-3xl font-semibold tracking-normal">
-                      Opportunities
-                    </h2>
-                  </div>
-                  <div className="divide-y divide-stone-300/70">
-                    {analysis.opportunities.map((opportunity) => (
-                      <article key={opportunity.title} className="py-6">
-                        <span className="rounded-md bg-stone-950 px-2.5 py-1 text-xs font-medium text-white">
-                          {priorityLabels[opportunity.priority]}
-                        </span>
-                        <h3 className="mt-4 text-xl font-semibold">
-                          {opportunity.title}
-                        </h3>
-                        <p className="mt-3 text-base leading-7 text-stone-600">
-                          {opportunity.rationale}
-                        </p>
-                        <List items={opportunity.suggestedMoves} />
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                <div className="border-b border-stone-300/70 pb-5">
-                  <p className="text-sm font-medium text-stone-500">差异分析</p>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-normal">
-                    Differentiation analysis
-                  </h2>
-                </div>
-                <div className="divide-y divide-stone-300/70">
-                  {analysis.differentiationAnalysis.map((item) => (
-                    <article
-                      key={item.dimension}
-                      className="grid gap-4 py-7 md:grid-cols-[180px_1fr]"
-                    >
-                      <h3 className="text-xl font-semibold">{item.dimension}</h3>
-                      <div>
-                        <p className="leading-7 text-stone-700">
-                          {item.currentPattern}
-                        </p>
-                        <List items={item.gaps} />
-                        <p className="mt-4 leading-7 text-stone-600">
-                          {item.implications}
-                        </p>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            </section>
+        {analysis && !isLoading && (
+          <section className="space-y-14 py-10 lg:py-12">
+            <AgentProgress isComplete />
+            <ExecutiveSummary
+              query={query}
+              competitors={analysis.competitors}
+              opportunities={analysis.opportunities}
+              featureCount={analysis.featureComparison.length}
+            />
+            <CompetitorOverview id="competitors" competitors={analysis.competitors} />
+            <PositioningMap competitors={analysis.competitors} />
+            <FeatureComparison features={analysis.featureComparison} />
+            <OpportunityInsights
+              id="opportunity-insights"
+              opportunities={analysis.opportunities}
+            />
+            <RecommendedProductDirection
+              competitors={analysis.competitors}
+              opportunities={analysis.opportunities}
+              userScenarios={analysis.userScenarios}
+            />
+            <ResearchDetails analysis={analysis} />
           </section>
         )}
       </section>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
+import { scoreOpportunities } from "../../../../lib/opportunity/scoreOpportunities";
 
 export const runtime = "nodejs";
 
@@ -15,11 +16,41 @@ type ErrorCode =
   | "OPENAI_REQUEST_FAILED"
   | "INVALID_MODEL_OUTPUT";
 
+type CapabilityLevel = "low" | "medium" | "high";
+
+type OpportunityInsight = {
+  opportunity_title: string;
+  gap_type: "用户" | "场景" | "流程" | "agent" | "商业化";
+  evidence: string;
+  unmet_need: string;
+  why_now: string;
+  product_direction: string;
+  priority: "High" | "Medium" | "Low";
+  priority_reason: string;
+  mvp_idea: string;
+  user_value?: number;
+  differentiation?: number;
+  feasibility?: number;
+  agent_fit?: number;
+  total_score?: number;
+  recommended_priority?: "High" | "Medium" | "Low";
+  recommendation_reason?: string;
+};
+
 type CompetitorAnalysis = {
   competitors: Array<{
     name: string;
+    product_name: string;
     category: string;
     positioning: string;
+    core_features: string[];
+    target_users: string[];
+    key_scenarios: string[];
+    pricing: string;
+    workflow_depth: CapabilityLevel;
+    automation_level: CapabilityLevel;
+    agent_capability: CapabilityLevel;
+    collaboration_support: CapabilityLevel;
     strengths: string[];
     weaknesses: string[];
     evidence: string[];
@@ -45,13 +76,7 @@ type CompetitorAnalysis = {
     gaps: string[];
     implications: string;
   }>;
-  opportunities: Array<{
-    title: string;
-    rationale: string;
-    targetUsers: string[];
-    suggestedMoves: string[];
-    priority: "high" | "medium" | "low";
-  }>;
+  opportunities: OpportunityInsight[];
 };
 
 type AnalysisMode = "web_search" | "model_only";
@@ -67,6 +92,11 @@ const analysisCache = new Map<
 const stringArraySchema = {
   type: "array",
   items: { type: "string" },
+} as const;
+
+const capabilityLevelSchema = {
+  type: "string",
+  enum: ["low", "medium", "high"],
 } as const;
 
 const analysisSchema = {
@@ -87,16 +117,34 @@ const analysisSchema = {
         additionalProperties: false,
         required: [
           "name",
+          "product_name",
           "category",
           "positioning",
+          "core_features",
+          "target_users",
+          "key_scenarios",
+          "pricing",
+          "workflow_depth",
+          "automation_level",
+          "agent_capability",
+          "collaboration_support",
           "strengths",
           "weaknesses",
           "evidence",
         ],
         properties: {
           name: { type: "string" },
+          product_name: { type: "string" },
           category: { type: "string" },
           positioning: { type: "string" },
+          core_features: stringArraySchema,
+          target_users: stringArraySchema,
+          key_scenarios: stringArraySchema,
+          pricing: { type: "string" },
+          workflow_depth: capabilityLevelSchema,
+          automation_level: capabilityLevelSchema,
+          agent_capability: capabilityLevelSchema,
+          collaboration_support: capabilityLevelSchema,
           strengths: stringArraySchema,
           weaknesses: stringArraySchema,
           evidence: stringArraySchema,
@@ -167,18 +215,29 @@ const analysisSchema = {
         type: "object",
         additionalProperties: false,
         required: [
-          "title",
-          "rationale",
-          "targetUsers",
-          "suggestedMoves",
+          "opportunity_title",
+          "gap_type",
+          "evidence",
+          "unmet_need",
+          "why_now",
+          "product_direction",
           "priority",
+          "priority_reason",
+          "mvp_idea",
         ],
         properties: {
-          title: { type: "string" },
-          rationale: { type: "string" },
-          targetUsers: stringArraySchema,
-          suggestedMoves: stringArraySchema,
-          priority: { type: "string", enum: ["high", "medium", "low"] },
+          opportunity_title: { type: "string" },
+          gap_type: {
+            type: "string",
+            enum: ["用户", "场景", "流程", "agent", "商业化"],
+          },
+          evidence: { type: "string" },
+          unmet_need: { type: "string" },
+          why_now: { type: "string" },
+          product_direction: { type: "string" },
+          priority: { type: "string", enum: ["High", "Medium", "Low"] },
+          priority_reason: { type: "string" },
+          mvp_idea: { type: "string" },
         },
       },
     },
@@ -229,78 +288,43 @@ function hasAnalysisShape(value: unknown): value is CompetitorAnalysis {
 function buildPrompt(query: string, mode: AnalysisMode) {
   const sourceInstruction =
     mode === "web_search"
-      ? "请优先基于 Web search 获取的当前公开信息。"
-      : "本次未使用实时 Web search；请基于模型知识和公开信息推断，并在 evidence 中明确写“基于模型知识和公开信息推断”。";
+      ? "请优先基于 Web search 获取的当前公开信息；如果公开信息不足，请明确标注“基于公开信息推断”。"
+      : "本次未使用实时 Web search；请基于模型知识和公开信息推断，并在 evidence 中明确标注“基于模型知识和公开信息推断”。";
 
   return `
-你是一个资深产品策略分析师。请基于当前公开信息，分析用户输入的赛道或产品名。
-
-用户输入：${query}
-
+你是一个高级 AI 产品战略分析 Agent，负责生成结构化竞品分析和可执行产品机会点。
+输入对象：${query}
 信息来源要求：${sourceInstruction}
 
-只返回一个 JSON 对象，字段必须严格使用以下结构：
-{
-  "competitors": [
-    {
-      "name": "竞品名称",
-      "category": "竞品类型",
-      "positioning": "定位",
-      "strengths": ["优势"],
-      "weaknesses": ["短板"],
-      "evidence": ["公开信息依据；不确定时写基于公开信息推断"]
-    }
-  ],
-  "featureComparison": [
-    {
-      "feature": "功能",
-      "importance": "high",
-      "comparison": [
-        {
-          "competitor": "竞品名称",
-          "performance": "表现",
-          "notes": "说明"
-        }
-      ]
-    }
-  ],
-  "userScenarios": [
-    {
-      "scenario": "场景",
-      "userType": "用户类型",
-      "painPoints": ["痛点"],
-      "currentAlternatives": ["当前替代方案"]
-    }
-  ],
-  "differentiationAnalysis": [
-    {
-      "dimension": "差异维度",
-      "currentPattern": "当前格局",
-      "gaps": ["缺口"],
-      "implications": "启示"
-    }
-  ],
-  "opportunities": [
-    {
-      "title": "机会点",
-      "rationale": "原因",
-      "targetUsers": ["目标用户"],
-      "suggestedMoves": ["建议动作"],
-      "priority": "high"
-    }
-  ]
-}
+请先判断输入是“赛道”还是“产品名”，再选择 3-6 个最相关竞品进行分析。
 
-要求：
-- 先判断输入更像“赛道”还是“产品名”，并据此选择竞品和分析视角。
-- 必须使用中文输出所有内容。
-- 给出 3 个竞品；如果是产品名，竞品应包含直接竞品和相邻替代方案。
-- 给出 5 个功能对比项，并让每个对比项覆盖主要竞品。
-- 给出 3 个用户场景、3 个差异分析维度、3 个机会点。
-- 每个字段保持简洁，单条说明尽量控制在 30 个汉字以内。
-- 机会点要面向可以落地的产品策略，不要只写泛泛的市场口号。
-- 对无法从公开信息确认的判断，在 evidence 或分析文字中明确写“基于公开信息推断”。
-- 不要输出 JSON 之外的任何解释文字。
+每个 competitors 项必须包含这些字段：
+- name：兼容旧页面的产品名，必须等于 product_name。
+- product_name：产品名。
+- category：产品类别。
+- positioning：产品定位。
+- core_features：核心功能，3-6 项。
+- target_users：目标用户，2-5 项。
+- key_scenarios：关键使用场景，2-5 项。
+- pricing：公开价格信息；不确定时写“未公开 / 基于公开信息推断”。
+- workflow_depth：工作流深度，只能是 low / medium / high。
+- automation_level：自动化水平，只能是 low / medium / high。
+- agent_capability：Agent 能力，只能是 low / medium / high。
+- collaboration_support：协作支持，只能是 low / medium / high。
+- strengths：优势，2-5 项。
+- weaknesses：弱点，2-5 项。
+- evidence：公开证据或判断依据，2-5 项；不确定的信息必须标注“基于公开信息推断”。
+
+请特别关注 workflow_depth、automation_level、agent_capability、collaboration_support，因为这些字段会用于后续机会点分析。
+
+机会点要求：
+- 从竞品、功能对比、用户场景、差异分析中提炼 5-8 条机会点。
+- 每条机会点必须至少满足以下条件中的两个以上：多个竞品覆盖不足、用户价值高、AI/Agent 增益明显、差异化可感知、适合作为 MVP。
+- evidence 必须点名相关竞品或对比维度，例如“Notion AI 的 agent_capability=low，ChatGPT 的 workflow_depth=medium，因此跨工具自动化存在缺口”。
+- 如果证据不足，evidence 写“证据不足”。
+- 优先输出 AI Agent 工作流、自动化执行、复杂任务拆解相关方向。
+- 所有内容用中文，字段名保持 JSON schema 规定的英文命名。
+- 只返回 JSON，不要返回 Markdown 或额外解释。
 `.trim();
 }
 
@@ -321,7 +345,7 @@ async function createAnalysis(
           }
         : {}),
       reasoning: { effort: "low" },
-      max_output_tokens: 3500,
+      max_output_tokens: 6000,
       text: {
         verbosity: "low",
         format: {
@@ -381,13 +405,14 @@ function getAnalysisMode(): AnalysisMode {
 function getOpenAIErrorMessage(error: unknown) {
   if (
     error instanceof Error &&
-    (/rate_limit/i.test(error.message) || "code" in error && error.code === "rate_limit_exceeded")
+    (/rate_limit/i.test(error.message) ||
+      ("code" in error && error.code === "rate_limit_exceeded"))
   ) {
-    return "OpenAI 账号请求过于频繁，已触发限流。请等待 1 分钟后再试；当前项目已改为低额度模式，每次分析只会发起 1 次 OpenAI 请求。";
+    return "OpenAI 账号请求过于频繁，已触发限流。当前页面会展示示例数据，真实分析请稍后重试。";
   }
 
   if (error instanceof Error && /timed? ?out/i.test(error.message)) {
-    return "OpenAI request timed out. If you are using a local proxy, set OPENAI_PROXY_URL in .env.local and restart the dev server.";
+    return "OpenAI 请求超时。当前页面会展示示例数据；如果使用本地代理，请确认 OPENAI_PROXY_URL 配置正确。";
   }
 
   if (
@@ -422,14 +447,16 @@ async function generateAnalysis(
     throw new Error("Model output did not match the expected analysis structure.");
   }
 
-  return analysis;
+  return {
+    ...analysis,
+    opportunities: await scoreOpportunities({
+      competitors: analysis.competitors,
+      opportunities: analysis.opportunities,
+    }),
+  };
 }
 
-function getCachedAnalysis(
-  client: OpenAI,
-  query: string,
-  mode: AnalysisMode,
-) {
+function getCachedAnalysis(client: OpenAI, query: string, mode: AnalysisMode) {
   const now = Date.now();
   const cacheKey = `${mode}:${query}`;
   const cached = analysisCache.get(cacheKey);

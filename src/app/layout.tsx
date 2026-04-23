@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI 竞品分析工具",
-  description: "输入赛道或产品名，生成清晰的 AI 竞品分析结果页。",
+  title: "Research AI",
+  description: "输入赛道、产品或问题，生成竞品与机会分析。",
 };
 
 export default function RootLayout({
