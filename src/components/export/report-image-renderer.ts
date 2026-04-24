@@ -9,6 +9,10 @@ const cardY = 40;
 const padding = 72;
 const contentWidth = width - padding * 2;
 const mapHeight = 380;
+const inkStrong = "#404040";
+const inkMedium = "#737373";
+const inkMuted = "#8a8a8a";
+const inkSoft = "#a3a3a3";
 
 function setFont(
   context: CanvasRenderingContext2D,
@@ -166,7 +170,7 @@ function drawPositioningMap(
   context.lineTo(plotX + plotWidth / 2, plotY + plotHeight);
   context.stroke();
 
-  context.fillStyle = "#a3a3a3";
+  context.fillStyle = inkSoft;
   setFont(context, 700, 16);
   context.fillText(map.quadrants.topLeft, x + 24, y + 30);
   context.fillText(map.quadrants.topRight, x + rectWidth - 126, y + 30);
@@ -174,7 +178,7 @@ function drawPositioningMap(
   context.fillText(map.quadrants.bottomRight, x + rectWidth - 112, y + mapHeight - 22);
 
   setFont(context, 700, 18);
-  context.fillStyle = "#525252";
+  context.fillStyle = inkMedium;
   context.fillText(map.xAxis, x + rectWidth / 2 - 68, y + mapHeight - 40);
   context.save();
   context.translate(x + 26, y + mapHeight / 2 + 70);
@@ -186,7 +190,7 @@ function drawPositioningMap(
     const pointX = plotX + (point.x / 100) * plotWidth;
     const pointY = plotY + ((100 - point.y) / 100) * plotHeight;
 
-    context.fillStyle = point.name.includes("Agent") ? "#047857" : "#171717";
+    context.fillStyle = point.name.includes("Agent") ? "#047857" : "#525252";
     context.beginPath();
     context.arc(pointX, pointY, point.name.includes("Agent") ? 11 : 8, 0, Math.PI * 2);
     context.fill();
@@ -194,10 +198,10 @@ function drawPositioningMap(
     context.lineWidth = 3;
     context.stroke();
 
-    context.fillStyle = "#171717";
+    context.fillStyle = inkStrong;
     setFont(context, 700, 16);
     context.fillText(point.name, pointX + 14, pointY - 4);
-    context.fillStyle = "#737373";
+    context.fillStyle = inkMuted;
     setFont(context, 400, 14);
     context.fillText(point.note, pointX + 14, pointY + 18);
   });
@@ -237,11 +241,11 @@ function drawReportImage(template: ReportTemplate) {
   setFont(context, 700, 24);
   context.fillText(`${template.reportType.badge} report`, padding, y);
 
-  context.fillStyle = "#171717";
+  context.fillStyle = inkStrong;
   setFont(context, 700, 44);
   y = drawWrappedText(context, template.title, padding, y + 62, contentWidth, 56);
 
-  context.fillStyle = "#525252";
+  context.fillStyle = inkMedium;
   setFont(context, 400, 24);
   y = drawWrappedText(context, template.subtitle, padding, y + 12, contentWidth, 34);
   y = drawWrappedText(context, template.audienceNote, padding, y + 8, contentWidth, 36);
@@ -253,7 +257,7 @@ function drawReportImage(template: ReportTemplate) {
   context.stroke();
   y += 68;
 
-  context.fillStyle = "#525252";
+  context.fillStyle = inkMedium;
   setFont(context, 400, 20);
   template.metadata.forEach((item) => {
     context.fillText(item, padding, y);
@@ -262,7 +266,7 @@ function drawReportImage(template: ReportTemplate) {
   y += 28;
 
   if (template.sections.length === 0) {
-    context.fillStyle = "#737373";
+    context.fillStyle = inkMuted;
     setFont(context, 400, 24);
     drawWrappedText(
       context,
@@ -288,11 +292,11 @@ function drawReportImage(template: ReportTemplate) {
     context.fillText(section.eyebrow, padding, y);
     y += 34;
 
-    context.fillStyle = "#171717";
+    context.fillStyle = inkStrong;
     setFont(context, 700, 30);
     y = drawWrappedText(context, section.title, padding, y, contentWidth, 40);
 
-    context.fillStyle = "#525252";
+    context.fillStyle = inkMedium;
     setFont(context, 400, 22);
     y = drawWrappedText(context, section.summary, padding, y + 10, contentWidth, 34);
     y += 22;
@@ -302,7 +306,7 @@ function drawReportImage(template: ReportTemplate) {
       y += mapHeight + 28;
     }
 
-    context.fillStyle = "#404040";
+    context.fillStyle = inkMedium;
     setFont(context, 400, 21);
     section.points.forEach((point) => {
       y = drawWrappedText(context, `- ${point}`, padding + 8, y, contentWidth - 16, 31);

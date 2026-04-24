@@ -46,23 +46,29 @@ export default function ReportPreview({ template }: ReportPreviewProps) {
             报告预览
           </h2>
         </div>
-        <p className="max-w-sm text-sm leading-6 text-neutral-500 sm:text-right">
-          预览与 PNG 导出使用同一张完整报告长图。
-        </p>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <p className="max-w-sm text-sm leading-6 text-neutral-500 sm:text-right">
+            预览与 PNG 导出使用同一张完整报告长图。
+          </p>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            disabled={!previewUrl}
+            aria-label="打开完整报告预览"
+            title="打开完整报告预览"
+            className="inline-flex items-center gap-1 border-b border-transparent text-sm font-medium text-neutral-500 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:text-neutral-300"
+          >
+            展开预览
+            <span aria-hidden="true" className="text-neutral-400">
+              ↗
+            </span>
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 overflow-hidden rounded-md border border-neutral-200 bg-neutral-100 p-3">
         {previewUrl ? (
           <div className="relative max-h-[420px] overflow-hidden rounded-sm border border-neutral-200 bg-white">
-            <div className="absolute right-3 top-3 z-10">
-              <button
-                type="button"
-                onClick={() => setExpanded(true)}
-                className="inline-flex h-9 items-center rounded-md bg-neutral-950 px-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(23,23,23,0.14)] transition duration-200 ease-out hover:bg-emerald-800"
-              >
-                放大预览
-              </button>
-            </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewUrl}
@@ -89,7 +95,7 @@ export default function ReportPreview({ template }: ReportPreviewProps) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="放大报告预览"
+          aria-label="完整报告预览"
           className="fixed inset-0 z-[60] bg-neutral-950/70 px-4 py-5 backdrop-blur-sm sm:px-6"
         >
           <div className="mx-auto flex h-full max-w-6xl flex-col rounded-lg bg-neutral-50 shadow-[0_30px_90px_rgba(0,0,0,0.3)]">
@@ -105,9 +111,10 @@ export default function ReportPreview({ template }: ReportPreviewProps) {
               <button
                 type="button"
                 onClick={() => setExpanded(false)}
-                className="inline-flex h-9 items-center rounded-md border border-neutral-200 bg-white px-3 text-sm font-semibold text-neutral-700 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950"
+                aria-label="关闭完整报告预览"
+                className="inline-flex h-9 items-center border-b border-transparent text-sm font-medium text-neutral-500 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950"
               >
-                关闭
+                关闭预览
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-auto bg-neutral-100 p-3 sm:p-5">
