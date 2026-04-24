@@ -476,6 +476,9 @@ export default function ResultClient({
   const [isLoading, setIsLoading] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState("Competition workspace");
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(
+    historyId ?? null,
+  );
   const [showAgentProgress, setShowAgentProgress] = useState(true);
   const [agentProgressStatus, setAgentProgressStatus] =
     useState<AgentProgressStatus>("loading");
@@ -518,8 +521,22 @@ export default function ResultClient({
       return;
     }
 
+    const params = new URLSearchParams();
+    params.set("from", "result");
+    params.set("q", query);
+
+    const historyFromUrl =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("history")
+        : null;
+    const exportHistoryId = currentHistoryId ?? historyFromUrl;
+
+    if (exportHistoryId) {
+      params.set("history", exportHistoryId);
+    }
+
     navigateWithTransition(
-      `/export?from=result&q=${encodeURIComponent(query)}`,
+      `/export?${params.toString()}`,
       "Opening export workflow",
     );
   }
@@ -533,6 +550,7 @@ export default function ResultClient({
       setNotice(null);
       setIsDemo(false);
       setIsTransitioning(false);
+      setCurrentHistoryId(historyId ?? null);
       setShowAgentProgress(true);
       setShowResultsContent(false);
       setAgentProgressStatus("loading");
@@ -546,6 +564,7 @@ export default function ResultClient({
           }
 
           setAnalysis(storedRecord.analysis);
+          setCurrentHistoryId(storedRecord.id);
           setIsDemo(Boolean(storedRecord.isDemo));
           setNotice(historySnapshotNotice(Boolean(storedRecord.isDemo)));
           setIsLoading(false);
@@ -566,6 +585,7 @@ export default function ResultClient({
           query,
           analysis: result,
         });
+        setCurrentHistoryId(historyRecord.id);
         window.history.replaceState(null, "", historyRecord.resultHref);
       } catch (requestError) {
         if (!isActive) {
@@ -585,6 +605,7 @@ export default function ResultClient({
           analysis: fallback,
           isDemo: true,
         });
+        setCurrentHistoryId(historyRecord.id);
         window.history.replaceState(null, "", historyRecord.resultHref);
       } finally {
         if (isActive) {

@@ -6,12 +6,14 @@ import ReportPreview from "@/components/export/report-preview";
 import ReportTypeSelector from "@/components/export/report-type-selector";
 import {
   allReportSections,
+  buildReportTemplateFromAnalysis,
   buildReportTemplate,
   defaultSelectedSections,
   type ReportSectionId,
   type ReportTypeId,
 } from "@/components/export/report-template";
 import PageTransitionOverlay from "@/components/PageTransitionOverlay";
+import { findStoredHistoryRecord } from "../../../lib/history/storage";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type ReactNode, useMemo, useState } from "react";
 
@@ -93,6 +95,7 @@ function ExportPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sourceQuery = searchParams.get("q")?.trim() ?? "";
+  const sourceHistoryId = searchParams.get("history")?.trim() ?? "";
   const [reportType, setReportType] = useState<ReportTypeId>("investor");
   const [selectedSections, setSelectedSections] = useState<ReportSectionId[]>(
     defaultSelectedSections,
@@ -105,10 +108,29 @@ function ExportPageClient() {
   });
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const template = useMemo(
-    () => buildReportTemplate(reportType, selectedSections),
-    [reportType, selectedSections],
+  const sourceRecord = useMemo(
+    () => (sourceHistoryId ? findStoredHistoryRecord(sourceHistoryId) : null),
+    [sourceHistoryId],
   );
+
+  const template = useMemo(
+    () =>
+      sourceRecord
+        ? buildReportTemplateFromAnalysis(
+            reportType,
+            selectedSections,
+            sourceQuery || sourceRecord.query,
+            sourceRecord.analysis,
+          )
+        : buildReportTemplate(reportType, selectedSections),
+    [reportType, selectedSections, sourceQuery, sourceRecord],
+  );
+
+  const sourceLabel = sourceRecord
+    ? "来自分析结果"
+    : sourceHistoryId
+      ? "未找到历史记录，使用示例报告"
+      : "示例报告";
 
   function togglePanel(panel: keyof typeof openPanels) {
     setOpenPanels((current) => ({
@@ -137,7 +159,14 @@ function ExportPageClient() {
     setIsTransitioning(true);
     window.setTimeout(() => {
       if (sourceQuery) {
-        router.push(`/result?q=${encodeURIComponent(sourceQuery)}`);
+        const params = new URLSearchParams();
+        params.set("q", sourceQuery);
+
+        if (sourceHistoryId) {
+          params.set("history", sourceHistoryId);
+        }
+
+        router.push(`/result?${params.toString()}`);
         return;
       }
 
@@ -174,7 +203,7 @@ function ExportPageClient() {
               {sourceQuery ? "返回分析结果" : "返回搜索"}
             </button>
             <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
-              Export workflow
+              {sourceLabel}
             </span>
           </div>
 
@@ -187,7 +216,9 @@ function ExportPageClient() {
                 导出报告
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600">
-                先选择读者版本，再选择要包含的内容，最后导出为适合交付的文件。
+                {sourceRecord
+                  ? `正在为「${sourceRecord.query}」生成面向不同读者的报告版本。`
+                  : "先选择读者版本，再选择要包含的内容，最后导出为适合交付的文件。"}
               </p>
             </div>
             <div className="border-y border-neutral-200 py-4 text-sm leading-6 text-neutral-500 lg:border-l lg:border-y-0 lg:pl-6">

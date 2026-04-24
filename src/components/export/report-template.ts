@@ -1,3 +1,5 @@
+import type { AnalysisResult } from "../../../lib/history/types";
+
 export type ReportTypeId = "investor" | "product-manager" | "full";
 
 export type ReportSectionId =
@@ -270,6 +272,187 @@ function getReportType(reportTypeId: ReportTypeId) {
   return reportTypes.find((type) => type.id === reportTypeId) ?? reportTypes[0];
 }
 
+function rankPriority(value?: "High" | "Medium" | "Low") {
+  if (value === "High") return 3;
+  if (value === "Medium") return 2;
+  return 1;
+}
+
+function getLeadingOpportunity(analysis: AnalysisResult) {
+  return [...analysis.opportunities].sort((a, b) => {
+    const scoreDelta = (b.total_score ?? 0) - (a.total_score ?? 0);
+
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    return (
+      rankPriority(b.recommended_priority ?? b.priority) -
+      rankPriority(a.recommended_priority ?? a.priority)
+    );
+  })[0];
+}
+
+function levelScore(value?: "low" | "medium" | "high") {
+  if (value === "high") return 82;
+  if (value === "medium") return 55;
+  if (value === "low") return 30;
+  return 45;
+}
+
+function clamp(value: number) {
+  return Math.max(18, Math.min(88, value));
+}
+
+function buildPositioningMapFromAnalysis(
+  analysis: AnalysisResult,
+): PositioningMap {
+  const competitorPoints = analysis.competitors.slice(0, 4).map((competitor, index) => {
+    const focusBase =
+      levelScore(competitor.collaboration_support) * 0.35 +
+      levelScore(competitor.workflow_depth) * 0.45 +
+      (competitor.key_scenarios?.length ?? 1) * 5;
+    const automationBase =
+      levelScore(competitor.automation_level) * 0.35 +
+      levelScore(competitor.closed_loop_capability) * 0.35 +
+      levelScore(competitor.agent_capability) * 0.3;
+
+    return {
+      name: competitor.product_name ?? competitor.name,
+      x: clamp(focusBase + index * 3),
+      y: clamp(automationBase + index * 2),
+      note: competitor.positioning,
+    };
+  });
+
+  const leadingOpportunity = getLeadingOpportunity(analysis);
+  const agentPoint = {
+    name: leadingOpportunity ? "建议切入方向" : "新产品机会",
+    x: 84,
+    y: 80,
+    note:
+      leadingOpportunity?.product_direction ??
+      "高垂直聚焦、高流程自动化的潜在机会区",
+  };
+
+  return {
+    ...positioningMap,
+    points: [...competitorPoints, agentPoint],
+  };
+}
+
+function buildSectionsFromAnalysis(analysis: AnalysisResult) {
+  const leadingOpportunity = getLeadingOpportunity(analysis);
+  const topCompetitors = analysis.competitors.slice(0, 4);
+  const topOpportunities = analysis.opportunities
+    .slice()
+    .sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
+    .slice(0, 4);
+  const featureItems = analysis.featureComparison.slice(0, 4);
+  const scenarios = analysis.userScenarios.slice(0, 3);
+  const differentiations = analysis.differentiationAnalysis.slice(0, 3);
+
+  return {
+    "executive-summary": {
+      id: "executive-summary",
+      eyebrow: "01 / Summary",
+      title: "Executive Summary",
+      summary:
+        leadingOpportunity?.product_direction ??
+        "当前分析已形成竞品格局、能力差异与可切入机会的结构化判断。",
+      points: [
+        `共识别 ${analysis.competitors.length} 个核心竞品、${analysis.featureComparison.length} 个能力对比维度、${analysis.opportunities.length} 个机会点。`,
+        leadingOpportunity
+          ? `最高优先级机会：${leadingOpportunity.opportunity_title}。`
+          : "当前机会点仍需结合更多用户场景继续验证。",
+        leadingOpportunity?.mvp_idea
+          ? `建议 MVP：${leadingOpportunity.mvp_idea}`
+          : "建议先围绕最高频用户任务验证最小可用工作流。",
+      ],
+    },
+    "core-competitors": {
+      id: "core-competitors",
+      eyebrow: "02 / Competitors",
+      title: "核心竞品",
+      summary:
+        topCompetitors[0]?.positioning ??
+        "核心竞品覆盖不同定位，适合从能力边界和目标用户两侧判断切入空间。",
+      points:
+        topCompetitors.length > 0
+          ? topCompetitors.flatMap((competitor) => [
+              `${competitor.product_name ?? competitor.name}：${competitor.positioning}`,
+              `优势：${competitor.strengths.slice(0, 2).join("、") || "暂未识别"}`,
+              `短板：${competitor.weaknesses.slice(0, 2).join("、") || "暂未识别"}`,
+            ])
+          : sectionContent["core-competitors"].points,
+    },
+    "feature-comparison": {
+      id: "feature-comparison",
+      eyebrow: "03 / Capability",
+      title: "功能对比",
+      summary:
+        "能力对比用于识别用户已经被满足的基础需求，以及仍然缺少闭环体验的高价值空白。",
+      points:
+        featureItems.length > 0
+          ? featureItems.map((feature) => {
+              const comparison = feature.comparison
+                .slice(0, 3)
+                .map((item) => `${item.competitor}：${item.performance}`)
+                .join("；");
+
+              return `${feature.feature}（${feature.importance}）：${comparison}`;
+            })
+          : sectionContent["feature-comparison"].points,
+    },
+    "positioning-map": {
+      id: "positioning-map",
+      eyebrow: "04 / Positioning",
+      title: "定位地图",
+      summary:
+        "定位地图基于竞品的垂直场景聚焦度和流程自动化深度生成，用于识别更适合切入的空白象限。",
+      points: [
+        "横轴代表垂直场景聚焦度，越靠右说明越贴近明确用户任务。",
+        "纵轴代表流程自动化深度，越靠上说明越接近端到端执行闭环。",
+        "建议关注右上象限：高垂直聚焦、高流程自动化。",
+      ],
+    },
+    "opportunity-insights": {
+      id: "opportunity-insights",
+      eyebrow: "05 / Opportunity",
+      title: "机会点洞察",
+      summary:
+        leadingOpportunity?.unmet_need ??
+        "机会点洞察聚焦尚未被竞品充分满足、且适合先做 MVP 验证的方向。",
+      points:
+        topOpportunities.length > 0
+          ? topOpportunities.flatMap((opportunity) => [
+              `${opportunity.opportunity_title}（${opportunity.recommended_priority ?? opportunity.priority}）：${opportunity.product_direction}`,
+              `MVP：${opportunity.mvp_idea}`,
+            ])
+          : sectionContent["opportunity-insights"].points,
+    },
+    "research-details": {
+      id: "research-details",
+      eyebrow: "06 / Evidence",
+      title: "研究详情",
+      summary:
+        "研究详情保留用户场景、痛点、替代方案和差异化推导，便于回溯结论来源。",
+      points: [
+        ...scenarios.flatMap((scenario) => [
+          `${scenario.userType} - ${scenario.scenario}`,
+          `痛点：${scenario.painPoints.join("、")}`,
+          `当前替代方案：${scenario.currentAlternatives.join("、")}`,
+        ]),
+        ...differentiations.flatMap((item) => [
+          `${item.dimension}：${item.currentPattern}`,
+          `缺口：${item.gaps.join("、")}`,
+          `启示：${item.implications}`,
+        ]),
+      ].slice(0, 12),
+    },
+  } satisfies Record<ReportSectionId, ReportTemplateSection>;
+}
+
 export function buildReportTemplate(
   reportTypeId: ReportTypeId,
   selectedSections: ReportSectionId[],
@@ -292,6 +475,35 @@ export function buildReportTemplate(
     ],
     sections,
     positioningMap,
+  };
+}
+
+export function buildReportTemplateFromAnalysis(
+  reportTypeId: ReportTypeId,
+  selectedSections: ReportSectionId[],
+  query: string,
+  analysis: AnalysisResult,
+): ReportTemplate {
+  const reportType = getReportType(reportTypeId);
+  const selected = new Set(selectedSections);
+  const sectionsById = buildSectionsFromAnalysis(analysis);
+  const sections = reportTypeSectionOrder[reportTypeId]
+    .filter((sectionId) => selected.has(sectionId))
+    .map((sectionId) => sectionsById[sectionId]);
+
+  return {
+    reportType,
+    title: `${reportType.title}：${query || "AI 产品"}竞品与机会分析`,
+    subtitle: "基于当前分析结果生成的报告预览",
+    audienceNote: `面向${reportType.title.replace("版", "")}读者，重点呈现：${reportType.focus}。`,
+    metadata: [
+      `分析对象：${query || "AI 产品"}`,
+      `核心竞品：${analysis.competitors.length} 个`,
+      `机会点：${analysis.opportunities.length} 个`,
+      "数据来源：当前分析结果",
+    ],
+    sections,
+    positioningMap: buildPositioningMapFromAnalysis(analysis),
   };
 }
 
