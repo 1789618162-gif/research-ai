@@ -19,7 +19,7 @@ export default function CompareSelector({
 }: CompareSelectorProps) {
   const selected =
     analyses.find((analysis) => analysis.id === value) ?? analyses[0];
-  const sideLabel = side === "left" ? "Left analysis" : "Right analysis";
+  const sideLabel = side === "left" ? "Analysis A" : "Analysis B";
   const sourceLabel = selected?.source === "live" ? "当前分析" : "Mock 基准";
 
   return (
@@ -50,24 +50,9 @@ export default function CompareSelector({
         ))}
       </select>
 
-      <div className="mt-5 rounded-md border border-neutral-100 bg-neutral-50/70 p-4 transition duration-300 ease-out hover:border-neutral-300 hover:bg-white">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold text-neutral-950">
-            {selected.title}
-          </h3>
-          <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
-            {selected.category}
-          </span>
-        </div>
-        <p className="mt-3 text-sm leading-6 text-neutral-600">
-          {selected.summary}
-        </p>
-        {selected.query ? (
-          <p className="mt-3 text-xs font-medium uppercase tracking-normal text-neutral-400">
-            Query: {selected.query}
-          </p>
-        ) : null}
-      </div>
+      <p className="mt-4 text-sm leading-6 text-neutral-600">
+        {selected.summary}
+      </p>
     </section>
   );
 }

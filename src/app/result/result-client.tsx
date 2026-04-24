@@ -610,7 +610,7 @@ export default function ResultClient({
       />
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
         <header className="border-b border-neutral-200 pb-8">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <button
               type="button"
               onClick={handleReturnHome}
@@ -630,25 +630,17 @@ export default function ResultClient({
               </svg>
               重新输入
             </button>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={handleOpenHistory}
                 disabled={isTransitioning}
                 className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                History
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenCompare}
-                disabled={isLoading || !analysis || isTransitioning}
-                className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                分析对比
+                历史记录
               </button>
               <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
-                {isLoading ? "Analyzing" : isDemo ? "Demo data" : "Live result"}
+                {isLoading ? "分析中" : isDemo ? "示例数据" : "实时结果"}
               </span>
             </div>
           </div>
@@ -716,7 +708,10 @@ export default function ResultClient({
 
         {analysis && !isLoading && showResultsContent && (
           <ResultContentShell key={historyId ? `history-${historyId}` : `results-${query}`}>
-            <ResultTableOfContents />
+            <ResultTableOfContents
+              canCompare={Boolean(analysis) && !isTransitioning}
+              onCompareClick={handleOpenCompare}
+            />
 
             {notice && (
               <section className="pt-6">
@@ -765,6 +760,30 @@ export default function ResultClient({
               </ScrollReveal>
               <ScrollReveal delay={280}>
                 <ResearchDetails analysis={analysis} />
+              </ScrollReveal>
+              <ScrollReveal delay={320}>
+                <section className="grid gap-4 rounded-lg border border-neutral-200 bg-white/80 p-5 shadow-[0_20px_60px_rgba(23,23,23,0.05)] transition duration-300 ease-out hover:-translate-y-0.5 hover:border-neutral-400 hover:bg-white hover:shadow-sm lg:grid-cols-[1fr_auto] lg:items-center">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-normal text-emerald-800">
+                      Final Step
+                    </p>
+                    <h2 className="mt-2 text-xl font-semibold text-neutral-950">
+                      最后一步：把当前分析放进对比工作台
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-neutral-600">
+                      将当前结果作为分析 A，选择另一个研究结果生成横向对比判断。
+                      {isDemo ? " 当前会使用示例数据进入对比。" : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenCompare}
+                    disabled={isTransitioning}
+                    className="inline-flex h-11 w-fit items-center justify-center rounded-md bg-neutral-950 px-5 text-sm font-semibold text-white transition duration-200 ease-out hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-neutral-500"
+                  >
+                    进入对比分析
+                  </button>
+                </section>
               </ScrollReveal>
             </section>
           </ResultContentShell>

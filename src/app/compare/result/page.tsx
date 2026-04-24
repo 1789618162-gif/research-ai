@@ -1,6 +1,6 @@
-import ComparePageClient from "@/components/compare/compare-page-client";
+import CompareResultPageClient from "@/components/compare/compare-result-page-client";
 
-type ComparePageProps = {
+type CompareResultPageProps = {
   searchParams: Promise<{
     left?: string | string[];
     right?: string | string[];
@@ -15,11 +15,13 @@ function getFirstSearchValue(value?: string | string[]) {
   return value ?? "";
 }
 
-export default async function ComparePage({ searchParams }: ComparePageProps) {
+export default async function CompareResultPage({
+  searchParams,
+}: CompareResultPageProps) {
   const params = await searchParams;
 
   return (
-    <ComparePageClient
+    <CompareResultPageClient
       initialLeftId={getFirstSearchValue(params.left) || undefined}
       initialRightId={getFirstSearchValue(params.right) || undefined}
     />

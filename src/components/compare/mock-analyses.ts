@@ -5,7 +5,7 @@ import type {
 import type { OpportunityInsight } from "@/components/OpportunityInsights";
 
 export const COMPARE_LIVE_ANALYSIS_STORAGE_KEY = "compare:left-analysis";
-const LIVE_ANALYSIS_ID = "live:current-analysis";
+export const LIVE_COMPARE_ANALYSIS_ID = "live-current";
 
 export type CompareFeatureComparisonItem = {
   feature: string;
@@ -69,7 +69,9 @@ function capabilityToRank(value?: CapabilityLevel) {
   return 1;
 }
 
-function getClosedLoopCapability(competitor: CompetitorOverviewItem): CapabilityLevel {
+function getClosedLoopCapability(
+  competitor: CompetitorOverviewItem,
+): CapabilityLevel {
   if (competitor.closed_loop_capability) {
     return competitor.closed_loop_capability;
   }
@@ -146,7 +148,7 @@ function deriveSummary(
   analysis: CompareAnalysisInput,
   recommendedDirection: string,
 ) {
-  return `围绕 ${query} 的实时分析，覆盖 ${analysis.competitors.length} 个核心竞品、${analysis.featureComparison.length} 个功能维度，并沉淀 ${analysis.opportunities.length} 条机会判断。推荐方向：${recommendedDirection}`;
+  return `围绕 ${query} 的当前分析，覆盖 ${analysis.competitors.length} 个核心竞品、${analysis.featureComparison.length} 个功能维度和 ${analysis.opportunities.length} 条机会判断。推荐方向：${recommendedDirection}`;
 }
 
 function deriveMvpIdeas(opportunities: OpportunityInsight[]) {
@@ -155,7 +157,7 @@ function deriveMvpIdeas(opportunities: OpportunityInsight[]) {
     .filter(Boolean)
     .slice(0, 3);
 
-  return ideas.length > 0 ? ideas : ["优先做单一高频任务的最小闭环。"];
+  return ideas.length > 0 ? ideas : ["优先验证一个高频任务的最小闭环。"];
 }
 
 export function createLiveCompareAnalysis(
@@ -165,7 +167,7 @@ export function createLiveCompareAnalysis(
   const recommendedDirection = deriveRecommendedDirection(analysis.opportunities);
 
   return {
-    id: LIVE_ANALYSIS_ID,
+    id: LIVE_COMPARE_ANALYSIS_ID,
     title: query,
     query,
     category: deriveCategory(query, analysis.competitors),
@@ -191,7 +193,7 @@ export function saveLiveCompareAnalysis(analysis: CompareAnalysis) {
 
   window.sessionStorage.setItem(
     COMPARE_LIVE_ANALYSIS_STORAGE_KEY,
-    JSON.stringify(analysis),
+    JSON.stringify({ ...analysis, id: LIVE_COMPARE_ANALYSIS_ID }),
   );
 }
 
@@ -210,7 +212,6 @@ export function loadLiveCompareAnalysis(): CompareAnalysis | null {
     const parsed = JSON.parse(raw) as Partial<CompareAnalysis>;
 
     if (
-      typeof parsed?.id !== "string" ||
       typeof parsed?.title !== "string" ||
       !Array.isArray(parsed?.competitors) ||
       !Array.isArray(parsed?.featureComparison) ||
@@ -221,7 +222,7 @@ export function loadLiveCompareAnalysis(): CompareAnalysis | null {
     }
 
     return {
-      id: parsed.id,
+      id: LIVE_COMPARE_ANALYSIS_ID,
       title: parsed.title,
       query: parsed.query,
       competitors: parsed.competitors,
@@ -238,7 +239,7 @@ export function loadLiveCompareAnalysis(): CompareAnalysis | null {
       mvpIdeas:
         Array.isArray(parsed.mvpIdeas) && parsed.mvpIdeas.length > 0
           ? parsed.mvpIdeas
-          : ["优先做单一高频任务的最小闭环。"],
+          : ["优先验证一个高频任务的最小闭环。"],
       source: "live",
     };
   } catch {
@@ -255,6 +256,18 @@ export function getDefaultRightCompareId(leftId: string) {
   );
 }
 
+export function getCompareOptions(liveAnalysis: CompareAnalysis | null) {
+  return liveAnalysis ? [liveAnalysis, ...mockAnalyses] : mockAnalyses;
+}
+
+export function findCompareAnalysis(
+  id: string | undefined,
+  options: CompareAnalysis[],
+  fallback: CompareAnalysis,
+) {
+  return options.find((analysis) => analysis.id === id) ?? fallback;
+}
+
 function createCompetitor(
   name: string,
   category: string,
@@ -267,11 +280,28 @@ function createCompetitor(
     product_name: name,
     category,
     positioning: `${name} 面向该赛道提供结构化 AI 工作流。`,
+    core_features: ["AI 生成", "任务辅助", "内容整理"],
+    target_users: ["个人用户", "团队用户"],
+    key_scenarios: ["日常工作", "资料整理", "效率提升"],
+    pricing: "订阅制 / 分层定价",
     workflow_depth: workflow,
     automation_level: automation,
+    closed_loop_capability: getClosedLoopCapability({
+      name,
+      product_name: name,
+      category,
+      positioning: "",
+      workflow_depth: workflow,
+      automation_level: automation,
+      agent_capability: agent,
+      strengths: [],
+      weaknesses: [],
+      evidence: [],
+    }),
     agent_capability: agent,
+    collaboration_support: workflow,
     strengths: ["品牌认知较强", "已有稳定场景入口"],
-    weaknesses: ["任务闭环不足", "仍需人工接力"],
+    weaknesses: ["任务闭环不足", "仍需要人工接力"],
     evidence: ["Mock 数据，用于 compare 页面演示。"],
   };
 }
@@ -288,7 +318,7 @@ function createOpportunity(
     opportunity_title: title,
     gap_type: gapType,
     evidence:
-      "多个现有产品都没有完整覆盖这条任务链路，Mock 分析显示仍存在可切入空档。",
+      "多个现有产品没有完整覆盖该任务链路，mock 分析显示仍存在可切入空间。",
     unmet_need:
       "用户希望用更少步骤拿到可交付结果，而不是停留在单点生成。",
     product_direction: direction,
@@ -322,8 +352,8 @@ export const mockAnalyses: CompareAnalysis[] = [
         "流程",
         "High",
         34,
-        "输入主题后生成资料清单、大纲和一版初稿。",
-        "围绕内容运营建立可交付的研究到写作闭环。",
+        "输入主题后生成资料清单、大纲和第一版初稿。",
+        "围绕内容运营建立研究到写作闭环。",
       ),
       createOpportunity(
         "一键多平台改写",
@@ -394,7 +424,7 @@ export const mockAnalyses: CompareAnalysis[] = [
     recommendedDirection: "优先服务需要证据链和结论可信度的专业研究场景。",
     automationScore: 78,
     agentFitScore: 88,
-    mvpIdeas: ["来源打分", "证据引用", "行动建议生成"],
+    mvpIdeas: ["来源评分", "证据引用", "行动建议生成"],
     source: "mock",
   },
   {

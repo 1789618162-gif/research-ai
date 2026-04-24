@@ -1,5 +1,4 @@
 const tocItems = [
-  { href: "#agent-progress", label: "分析进度" },
   { href: "#executive-summary", label: "决策摘要" },
   { href: "#competitors", label: "核心竞品" },
   { href: "#positioning-map", label: "定位地图" },
@@ -9,7 +8,15 @@ const tocItems = [
   { href: "#research-details", label: "研究详情" },
 ];
 
-export default function ResultTableOfContents() {
+type ResultTableOfContentsProps = {
+  canCompare?: boolean;
+  onCompareClick?: () => void;
+};
+
+export default function ResultTableOfContents({
+  canCompare = false,
+  onCompareClick,
+}: ResultTableOfContentsProps) {
   return (
     <nav
       aria-label="结果页目录"
@@ -19,7 +26,7 @@ export default function ResultTableOfContents() {
         <p className="shrink-0 text-xs font-semibold uppercase tracking-normal text-neutral-400">
           目录
         </p>
-        <div className="flex min-w-max items-center gap-2">
+        <div className="flex min-w-max flex-1 items-center gap-2">
           {tocItems.map((item) => (
             <a
               key={item.href}
@@ -30,6 +37,15 @@ export default function ResultTableOfContents() {
             </a>
           ))}
         </div>
+        {canCompare && onCompareClick ? (
+          <button
+            type="button"
+            onClick={onCompareClick}
+            className="shrink-0 rounded-md bg-neutral-950 px-3 py-1.5 text-sm font-semibold text-white transition duration-200 ease-out hover:bg-emerald-800"
+          >
+            对比分析
+          </button>
+        ) : null}
       </div>
     </nav>
   );
