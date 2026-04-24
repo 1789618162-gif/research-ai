@@ -477,6 +477,9 @@ export default function ResultClient({
   const [isLoading, setIsLoading] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState("Competition workspace");
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(
+    historyId ?? null,
+  );
   const [showAgentProgress, setShowAgentProgress] = useState(true);
   const [agentProgressStatus, setAgentProgressStatus] =
     useState<AgentProgressStatus>("loading");
@@ -510,6 +513,31 @@ export default function ResultClient({
     navigateWithTransition("/compare", "Opening compare workspace");
   }
 
+  function handleOpenExport() {
+    if (isLoading || !analysis) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("from", "result");
+    params.set("q", query);
+
+    const historyFromUrl =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("history")
+        : null;
+    const exportHistoryId = currentHistoryId ?? historyFromUrl;
+
+    if (exportHistoryId) {
+      params.set("history", exportHistoryId);
+    }
+
+    navigateWithTransition(
+      `/export?${params.toString()}`,
+      "Opening export workflow",
+    );
+  }
+
   useEffect(() => {
     let isActive = true;
 
@@ -519,6 +547,7 @@ export default function ResultClient({
       setNotice(null);
       setIsDemo(false);
       setIsTransitioning(false);
+      setCurrentHistoryId(historyId ?? null);
       setShowAgentProgress(true);
       setShowResultsContent(false);
       setAgentProgressStatus("loading");
@@ -532,6 +561,7 @@ export default function ResultClient({
           }
 
           setAnalysis(storedRecord.analysis);
+          setCurrentHistoryId(storedRecord.id);
           setIsDemo(Boolean(storedRecord.isDemo));
           setNotice(historySnapshotNotice(Boolean(storedRecord.isDemo)));
           setIsLoading(false);
@@ -552,6 +582,7 @@ export default function ResultClient({
           query,
           analysis: result,
         });
+        setCurrentHistoryId(historyRecord.id);
         window.history.replaceState(null, "", historyRecord.resultHref);
       } catch (requestError) {
         if (!isActive) {
@@ -571,6 +602,7 @@ export default function ResultClient({
           analysis: fallback,
           isDemo: true,
         });
+        setCurrentHistoryId(historyRecord.id);
         window.history.replaceState(null, "", historyRecord.resultHref);
       } finally {
         if (isActive) {
@@ -609,7 +641,7 @@ export default function ResultClient({
         <header className="border-b border-neutral-200 pb-8">
           <AppTopNav current="result" />
 
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <button
               type="button"
               onClick={handleReturnHome}
@@ -629,6 +661,28 @@ export default function ResultClient({
               </svg>
               重新输入
             </button>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleOpenCompare}
+                disabled={isLoading || !analysis || isTransitioning}
+                className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                分析对比
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenExport}
+                disabled={isLoading || !analysis || isTransitioning}
+                className="inline-flex items-center rounded-md bg-neutral-950 px-3 py-1.5 text-sm font-medium text-white transition duration-200 ease-out hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                导出报告
+              </button>
+              <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
+                {isLoading ? "Analyzing" : isDemo ? "Demo data" : "Live result"}
+              </span>
+            </div>
           </div>
 
           <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
