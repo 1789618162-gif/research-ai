@@ -1,5 +1,6 @@
 "use client";
 
+import AppTopNav from "@/components/AppTopNav";
 import CompareResultContent from "@/components/compare/compare-result-content";
 import {
   findCompareAnalysis,
@@ -86,14 +87,17 @@ export default function CompareResultPageClient({
   if (!hasCheckedLiveAnalysis) {
     return (
       <main className="min-h-screen bg-neutral-50 text-neutral-950">
-        <section className="mx-auto flex min-h-screen w-full max-w-7xl items-center px-5 sm:px-8 lg:px-10">
-          <div>
+        <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-10">
+          <AppTopNav current="compare" />
+          <div className="flex flex-1 items-center">
+            <div>
             <p className="text-sm font-medium uppercase tracking-normal text-emerald-800">
               Loading Compare
             </p>
             <h1 className="mt-4 text-4xl font-semibold tracking-normal">
               正在读取对比对象
             </h1>
+            </div>
           </div>
         </section>
       </main>
@@ -104,7 +108,9 @@ export default function CompareResultPageClient({
     <main className="min-h-screen bg-neutral-50 text-neutral-950">
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
         <header className="border-b border-neutral-200 pb-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <AppTopNav current="compare" />
+
+          <div className="mt-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm font-medium uppercase tracking-normal text-emerald-800">
                 Research Compare

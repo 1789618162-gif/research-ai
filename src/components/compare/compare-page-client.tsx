@@ -1,5 +1,6 @@
 "use client";
 
+import AppTopNav from "@/components/AppTopNav";
 import CompareSelector from "@/components/compare/compare-selector";
 import {
   getCompareOptions,
@@ -121,7 +122,9 @@ export default function ComparePageClient({
     <main className="min-h-screen bg-neutral-50 text-neutral-950">
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
         <header className="border-b border-neutral-200 pb-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <AppTopNav current="compare" />
+
+          <div className="mt-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm font-medium uppercase tracking-normal text-emerald-800">
                 Research Compare

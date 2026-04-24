@@ -2,6 +2,7 @@
 
 import CollapsibleSection from "@/components/CollapsibleSection";
 import CompetitorOverview from "@/components/CompetitorOverview";
+import AppTopNav from "@/components/AppTopNav";
 import AgentProgress, {
   type AgentProgressStatus,
 } from "@/components/AgentProgress";
@@ -610,7 +611,9 @@ export default function ResultClient({
       />
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
         <header className="border-b border-neutral-200 pb-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <AppTopNav current="result" />
+
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <button
               type="button"
               onClick={handleReturnHome}
@@ -631,6 +634,14 @@ export default function ResultClient({
               重新输入
             </button>
             <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleOpenCompare}
+                disabled={isLoading || !analysis || isTransitioning}
+                className="inline-flex items-center rounded-md bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition duration-200 ease-out hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-neutral-500"
+              >
+                对比分析
+              </button>
               <button
                 type="button"
                 onClick={handleOpenHistory}
@@ -708,10 +719,7 @@ export default function ResultClient({
 
         {analysis && !isLoading && showResultsContent && (
           <ResultContentShell key={historyId ? `history-${historyId}` : `results-${query}`}>
-            <ResultTableOfContents
-              canCompare={Boolean(analysis) && !isTransitioning}
-              onCompareClick={handleOpenCompare}
-            />
+            <ResultTableOfContents />
 
             {notice && (
               <section className="pt-6">

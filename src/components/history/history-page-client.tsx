@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import AppTopNav from "@/components/AppTopNav";
 import PageTransitionOverlay from "@/components/PageTransitionOverlay";
 import HistoryCard from "@/components/history/history-card";
 import HistoryFilters, {
@@ -197,7 +198,21 @@ export default function HistoryPageClient({ records }: HistoryPageClientProps) {
       <main className="min-h-screen bg-neutral-50 text-neutral-950">
         <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
           <header className="border-b border-neutral-200 pb-8">
-            <div className="flex items-center justify-between gap-4">
+            <AppTopNav
+              current="history"
+              actions={
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigateWithTransition("/search", "Starting a new analysis")
+                  }
+                  className="inline-flex h-10 items-center rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition duration-200 ease-out hover:bg-emerald-800"
+                >
+                  新建分析
+                </button>
+              }
+            />
+            <div className="hidden">
               <button
                 type="button"
                 onClick={() =>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import AppTopNav from "@/components/AppTopNav";
 import PageTransitionOverlay from "@/components/PageTransitionOverlay";
 import SearchInput from "@/components/search/search-input";
 
@@ -31,29 +32,8 @@ export default function SearchShell() {
 
       <main className="min-h-screen bg-neutral-50 text-neutral-950">
         <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-5 sm:px-8 lg:px-10">
-          <header className="flex items-center justify-between">
-            <Link
-              href="/search"
-              className="inline-flex items-center gap-3 text-neutral-950"
-              aria-label="Research AI 首页"
-            >
-              <span className="grid h-8 w-8 place-items-center rounded-md bg-neutral-950 text-xs font-semibold text-white">
-                AI
-              </span>
-              <span className="text-sm font-semibold tracking-normal">
-                Research AI
-              </span>
-            </Link>
-
-            <button
-              type="button"
-              onClick={() =>
-                navigateWithTransition("/history", "Opening research archive")
-              }
-              className="text-sm font-medium text-neutral-500 transition duration-200 ease-out hover:text-neutral-950"
-            >
-              History
-            </button>
+          <header>
+            <AppTopNav current="search" />
           </header>
 
           <div className="flex flex-1 items-center justify-center py-16 sm:py-20">
