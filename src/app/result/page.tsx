@@ -4,6 +4,7 @@ import ResultClient from "./result-client";
 type ResultPageProps = {
   searchParams: Promise<{
     q?: string | string[];
+    history?: string | string[];
   }>;
 };
 
@@ -18,6 +19,7 @@ function getFirstSearchValue(value?: string | string[]) {
 export default async function ResultPage({ searchParams }: ResultPageProps) {
   const params = await searchParams;
   const query = getFirstSearchValue(params.q).trim();
+  const historyId = getFirstSearchValue(params.history).trim();
 
   if (!query) {
     return (
@@ -30,7 +32,7 @@ export default async function ResultPage({ searchParams }: ResultPageProps) {
             还没有可分析的赛道或产品名。
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-stone-600">
-            返回首页输入一个关键词，系统会调用 API 并生成结构化竞品分析。
+            返回搜索页输入一个关键词，系统会调用 API 并生成结构化竞品分析。
           </p>
           <Link
             href="/search"
@@ -47,12 +49,12 @@ export default async function ResultPage({ searchParams }: ResultPageProps) {
               <path d="M19 12H5" />
               <path d="m11 18-6-6 6-6" />
             </svg>
-            返回首页
+            返回搜索页
           </Link>
         </section>
       </main>
     );
   }
 
-  return <ResultClient query={query} />;
+  return <ResultClient query={query} historyId={historyId || undefined} />;
 }

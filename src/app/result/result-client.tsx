@@ -1,52 +1,30 @@
 "use client";
 
 import CollapsibleSection from "@/components/CollapsibleSection";
-import CompetitorOverview, {
-  type CompetitorOverviewItem,
-} from "@/components/CompetitorOverview";
+import CompetitorOverview from "@/components/CompetitorOverview";
 import AgentProgress, {
   type AgentProgressStatus,
 } from "@/components/AgentProgress";
 import ExecutiveSummary from "@/components/ExecutiveSummary";
-import OpportunityInsights, {
-  type OpportunityInsight,
-} from "@/components/OpportunityInsights";
+import OpportunityInsights from "@/components/OpportunityInsights";
 import PageTransitionOverlay from "@/components/PageTransitionOverlay";
 import PositioningMap from "@/components/PositioningMap";
 import RecommendedProductDirection from "@/components/RecommendedProductDirection";
 import ResultTableOfContents from "@/components/ResultTableOfContents";
 import ScrollReveal from "@/components/ScrollReveal";
 import SectionHeader from "@/components/SectionHeader";
+import {
+  createLiveCompareAnalysis,
+  saveLiveCompareAnalysis,
+} from "@/components/compare/mock-analyses";
+import {
+  createStoredHistoryRecord,
+  findStoredHistoryRecord,
+} from "../../../lib/history/storage";
+import type { AnalysisResult } from "../../../lib/history/types";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-
-type Competitor = CompetitorOverviewItem;
-
-type Analysis = {
-  competitors: Competitor[];
-  featureComparison: Array<{
-    feature: string;
-    importance: "high" | "medium" | "low";
-    comparison: Array<{
-      competitor: string;
-      performance: string;
-      notes: string;
-    }>;
-  }>;
-  userScenarios: Array<{
-    scenario: string;
-    userType: string;
-    painPoints: string[];
-    currentAlternatives: string[];
-  }>;
-  differentiationAnalysis: Array<{
-    dimension: string;
-    currentPattern: string;
-    gaps: string[];
-    implications: string;
-  }>;
-  opportunities: OpportunityInsight[];
-};
+type Analysis = AnalysisResult;
 
 type ApiError = {
   error?: {
@@ -57,6 +35,7 @@ type ApiError = {
 
 type ResultClientProps = {
   query: string;
+  historyId?: string;
 };
 
 type ResultContentShellProps = {
@@ -64,6 +43,7 @@ type ResultContentShellProps = {
 };
 
 const requestCache = new Map<string, Promise<Analysis>>();
+const transitionMs = 650;
 
 const importanceLabels = {
   high: "高",
@@ -322,6 +302,12 @@ function createDemoAnalysis(query: string) {
   };
 }
 
+function historySnapshotNotice(isDemo: boolean) {
+  return isDemo
+    ? "当前查看的是已保存的示例分析快照。"
+    : "当前查看的是已保存的分析快照。";
+}
+
 function getErrorMessage(error: ApiError) {
   if (error.error?.code === "OPENAI_CONFIG_MISSING") {
     return "还没有配置 OPENAI_API_KEY。请在 .env.local 中配置后重启开发服务器。";
@@ -479,27 +465,52 @@ function ResearchDetails({ analysis }: { analysis: Analysis }) {
   );
 }
 
-export default function ResultClient({ query }: ResultClientProps) {
+export default function ResultClient({
+  query,
+  historyId,
+}: ResultClientProps) {
   const router = useRouter();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLeaving, setIsLeaving] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionLabel, setTransitionLabel] = useState("Competition workspace");
   const [showAgentProgress, setShowAgentProgress] = useState(true);
   const [agentProgressStatus, setAgentProgressStatus] =
     useState<AgentProgressStatus>("loading");
   const [showResultsContent, setShowResultsContent] = useState(false);
 
-  function handleReturnHome() {
-    if (isLeaving) {
+  function navigateWithTransition(
+    href: string,
+    label = "Competition workspace",
+  ) {
+    if (isTransitioning) {
       return;
     }
 
-    setIsLeaving(true);
+    setTransitionLabel(label);
+    setIsTransitioning(true);
     window.setTimeout(() => {
-      router.push("/search");
-    }, 650);
+      router.push(href);
+    }, transitionMs);
+  }
+
+  function handleReturnHome() {
+    navigateWithTransition("/search", "Returning to search");
+  }
+
+  function handleOpenHistory() {
+    navigateWithTransition("/history", "Opening research archive");
+  }
+
+  function handleOpenCompare() {
+    if (isLoading || !analysis) {
+      return;
+    }
+
+    saveLiveCompareAnalysis(createLiveCompareAnalysis(query, analysis));
+    navigateWithTransition("/compare", "Opening compare workspace");
   }
 
   useEffect(() => {
@@ -507,12 +518,30 @@ export default function ResultClient({ query }: ResultClientProps) {
 
     async function analyze() {
       setIsLoading(true);
+      setAnalysis(null);
       setNotice(null);
       setIsDemo(false);
-      setIsLeaving(false);
+      setIsTransitioning(false);
       setShowAgentProgress(true);
       setShowResultsContent(false);
       setAgentProgressStatus("loading");
+
+      if (historyId) {
+        const storedRecord = findStoredHistoryRecord(historyId);
+
+        if (storedRecord) {
+          if (!isActive) {
+            return;
+          }
+
+          setAnalysis(storedRecord.analysis);
+          setIsDemo(Boolean(storedRecord.isDemo));
+          setNotice(historySnapshotNotice(Boolean(storedRecord.isDemo)));
+          setIsLoading(false);
+          setAgentProgressStatus("complete");
+          return;
+        }
+      }
 
       try {
         const result = await fetchAnalysis(query);
@@ -522,18 +551,30 @@ export default function ResultClient({ query }: ResultClientProps) {
         }
 
         setAnalysis(result);
+        const historyRecord = createStoredHistoryRecord({
+          query,
+          analysis: result,
+        });
+        window.history.replaceState(null, "", historyRecord.resultHref);
       } catch (requestError) {
         if (!isActive) {
           return;
         }
 
-        setAnalysis(createDemoAnalysis(query));
+        const fallback = createDemoAnalysis(query);
+        setAnalysis(fallback);
         setIsDemo(true);
         setNotice(
           requestError instanceof Error
             ? requestError.message
             : "真实 AI 分析暂不可用，已切换为示例数据。",
         );
+        const historyRecord = createStoredHistoryRecord({
+          query,
+          analysis: fallback,
+          isDemo: true,
+        });
+        window.history.replaceState(null, "", historyRecord.resultHref);
       } finally {
         if (isActive) {
           setIsLoading(false);
@@ -547,7 +588,7 @@ export default function ResultClient({ query }: ResultClientProps) {
     return () => {
       isActive = false;
     };
-  }, [query]);
+  }, [historyId, query]);
 
   const summary = useMemo(() => {
     if (!analysis) {
@@ -563,7 +604,10 @@ export default function ResultClient({ query }: ResultClientProps) {
 
   return (
     <main className="min-h-screen scroll-smooth bg-neutral-50 text-neutral-950">
-      <PageTransitionOverlay visible={isLeaving} />
+      <PageTransitionOverlay
+        visible={isTransitioning}
+        label={transitionLabel}
+      />
       <section className="mx-auto w-full max-w-7xl px-5 py-5 sm:px-8 lg:px-10">
         <header className="border-b border-neutral-200 pb-8">
           <div className="flex items-center justify-between gap-4">
@@ -586,9 +630,27 @@ export default function ResultClient({ query }: ResultClientProps) {
               </svg>
               重新输入
             </button>
-            <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
-              {isLoading ? "Analyzing" : isDemo ? "Demo data" : "Live result"}
-            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleOpenHistory}
+                disabled={isTransitioning}
+                className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                History
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenCompare}
+                disabled={isLoading || !analysis || isTransitioning}
+                className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                分析对比
+              </button>
+              <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
+                {isLoading ? "Analyzing" : isDemo ? "Demo data" : "Live result"}
+              </span>
+            </div>
           </div>
 
           <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
@@ -642,7 +704,7 @@ export default function ResultClient({ query }: ResultClientProps) {
         {showAgentProgress && (
           <section className={isLoading ? "pb-16" : "pt-10"}>
             <AgentProgress
-              key={query}
+              key={historyId ? `${query}-${historyId}` : query}
               status={agentProgressStatus}
               onDone={() => {
                 setShowAgentProgress(false);
@@ -653,17 +715,16 @@ export default function ResultClient({ query }: ResultClientProps) {
         )}
 
         {analysis && !isLoading && showResultsContent && (
-          <ResultContentShell key={`results-${query}`}>
+          <ResultContentShell key={historyId ? `history-${historyId}` : `results-${query}`}>
             <ResultTableOfContents />
 
             {notice && (
               <section className="pt-6">
                 <div className="border-y border-amber-200 bg-amber-50/80 px-5 py-4 text-amber-950">
-                  <p className="text-sm font-semibold">当前为示例数据</p>
-                  <p className="mt-2 text-sm leading-6">
-                    真实 AI 分析暂不可用，页面已切换为 Demo
-                    机会洞察。原因：{notice}
+                  <p className="text-sm font-semibold">
+                    {isDemo ? "当前为示例数据" : "当前为已保存快照"}
                   </p>
+                  <p className="mt-2 text-sm leading-6">{notice}</p>
                 </div>
               </section>
             )}
