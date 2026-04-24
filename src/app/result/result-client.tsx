@@ -513,6 +513,17 @@ export default function ResultClient({
     navigateWithTransition("/compare", "Opening compare workspace");
   }
 
+  function handleOpenExport() {
+    if (isLoading || !analysis) {
+      return;
+    }
+
+    navigateWithTransition(
+      `/export?from=result&q=${encodeURIComponent(query)}`,
+      "Opening export workflow",
+    );
+  }
+
   useEffect(() => {
     let isActive = true;
 
@@ -646,6 +657,14 @@ export default function ResultClient({
                 className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 分析对比
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenExport}
+                disabled={isLoading || !analysis || isTransitioning}
+                className="inline-flex items-center rounded-md bg-neutral-950 px-3 py-1.5 text-sm font-medium text-white transition duration-200 ease-out hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                导出报告
               </button>
               <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
                 {isLoading ? "Analyzing" : isDemo ? "Demo data" : "Live result"}
