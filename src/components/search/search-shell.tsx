@@ -2,18 +2,52 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppTopNav from "@/components/AppTopNav";
 import PageTransitionOverlay from "@/components/PageTransitionOverlay";
 import SearchInput from "@/components/search/search-input";
 
 const sampleReportHref = `/result?q=${encodeURIComponent("AI 写作工具")}`;
 const transitionMs = 650;
+const searchBootMs = 900;
+
+function isReloadNavigation() {
+  if (typeof performance === "undefined") {
+    return false;
+  }
+
+  const [navigation] = performance.getEntriesByType(
+    "navigation",
+  ) as PerformanceNavigationTiming[];
+
+  return navigation?.type === "reload";
+}
 
 export default function SearchShell() {
   const router = useRouter();
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isBootLoading, setIsBootLoading] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState("Competition workspace");
+
+  useEffect(() => {
+    if (!isReloadNavigation()) {
+      return;
+    }
+
+    const startTimer = window.setTimeout(() => {
+      setTransitionLabel("Loading search workspace");
+      setIsBootLoading(true);
+    }, 0);
+
+    const endTimer = window.setTimeout(() => {
+      setIsBootLoading(false);
+    }, searchBootMs);
+
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearTimeout(endTimer);
+    };
+  }, []);
 
   function navigateWithTransition(
     href: string,
@@ -28,7 +62,10 @@ export default function SearchShell() {
 
   return (
     <>
-      <PageTransitionOverlay visible={isTransitioning} label={transitionLabel} />
+      <PageTransitionOverlay
+        visible={isTransitioning || isBootLoading}
+        label={transitionLabel}
+      />
 
       <main className="min-h-screen bg-neutral-50 text-neutral-950">
         <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-5 sm:px-8 lg:px-10">

@@ -501,10 +501,6 @@ export default function ResultClient({
     navigateWithTransition("/search", "Returning to search");
   }
 
-  function handleOpenHistory() {
-    navigateWithTransition("/history", "Opening research archive");
-  }
-
   function handleOpenCompare() {
     if (isLoading || !analysis) {
       return;
@@ -613,7 +609,7 @@ export default function ResultClient({
         <header className="border-b border-neutral-200 pb-8">
           <AppTopNav current="result" />
 
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-8">
             <button
               type="button"
               onClick={handleReturnHome}
@@ -633,27 +629,6 @@ export default function ResultClient({
               </svg>
               重新输入
             </button>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleOpenCompare}
-                disabled={isLoading || !analysis || isTransitioning}
-                className="inline-flex items-center rounded-md bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition duration-200 ease-out hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-neutral-500"
-              >
-                对比分析
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenHistory}
-                disabled={isTransitioning}
-                className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition duration-200 ease-out hover:border-neutral-400 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                历史记录
-              </button>
-              <span className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600">
-                {isLoading ? "分析中" : isDemo ? "示例数据" : "实时结果"}
-              </span>
-            </div>
           </div>
 
           <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
@@ -719,7 +694,10 @@ export default function ResultClient({
 
         {analysis && !isLoading && showResultsContent && (
           <ResultContentShell key={historyId ? `history-${historyId}` : `results-${query}`}>
-            <ResultTableOfContents />
+            <ResultTableOfContents
+              canCompare={Boolean(analysis) && !isTransitioning}
+              onCompareClick={handleOpenCompare}
+            />
 
             {notice && (
               <section className="pt-6">
