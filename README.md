@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Research AI
 
-## Getting Started
+Research AI is a Next.js AI product strategy workspace for competitive research, opportunity discovery, comparison, history, export, and Agent configuration.
 
-First, run the development server:
+## Public Entry
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+After deployment, share the production URL from Vercel. The public flow is:
+
+```txt
+/ -> /splash -> /search -> /result?q=...
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Core routes:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `/search` - start a new analysis
+- `/result?q=...` - view an AI analysis
+- `/history` - local browser research archive
+- `/compare` - compare saved analyses
+- `/export` - export reports
+- `/settings` - configure Agent preferences
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Local Development
 
-## Learn More
+```bash
+npm install
+npm run dev -- -p 3002
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open [http://localhost:3002](http://localhost:3002).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Required Environment Variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+For a public deployment with real OpenAI analysis and daily quota protection:
 
-## Deploy on Vercel
+```env
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.4-mini
+OPENAI_ENABLE_WEB_SEARCH=false
+OPENAI_DAILY_QUOTA=20
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Notes:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `OPENAI_API_KEY` must be configured only in Vercel environment variables, never in client code.
+- `OPENAI_DAILY_QUOTA` limits public real analysis requests per day.
+- Upstash Redis stores the daily quota counter across Vercel serverless instances.
+- Keep `OPENAI_ENABLE_WEB_SEARCH=false` for the first public version to reduce cost and rate-limit risk.
+
+## Deploy To Vercel
+
+1. Push this project to a GitHub repository.
+2. Import the repository in Vercel.
+3. Use the default Next.js settings:
+   - Install Command: `npm install`
+   - Build Command: `npm run build`
+4. Add the environment variables above in Vercel Project Settings.
+5. Redeploy and open the Vercel production URL.
+
+## Verification
+
+Before deployment:
+
+```bash
+npm run lint
+npm run build
+```
+
+After deployment:
+
+- Open `/` and confirm it enters `/splash`, then `/search`.
+- Run a real analysis from `/search`.
+- Confirm `/history`, `/compare`, `/export`, and `/settings` are accessible.
+- If the daily quota is exceeded, the result page should fall back to example data instead of breaking.
