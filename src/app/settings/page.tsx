@@ -6,6 +6,7 @@ import DimensionSettings from "@/components/settings/dimension-settings";
 import OutputSettings from "@/components/settings/output-settings";
 import PromptSettings from "@/components/settings/prompt-settings";
 import ScoringSettings from "@/components/settings/scoring-settings";
+import { SettingRow, SettingsSection } from "@/components/settings/settings-section";
 import {
   defaultAgentSettings,
   type AgentSettings,
@@ -14,10 +15,12 @@ import {
 } from "../../../lib/types/settings";
 
 const navItems = [
+  { href: "#workspace", label: "工作区模式" },
   { href: "#dimensions", label: "分析维度" },
   { href: "#scoring", label: "评分权重" },
   { href: "#output", label: "输出偏好" },
   { href: "#prompt", label: "Prompt 策略" },
+  { href: "#upgrade", label: "登录后能力" },
 ];
 
 function cloneDefaultSettings(): AgentSettings {
@@ -115,6 +118,26 @@ export default function SettingsPage() {
           </aside>
 
           <div className="space-y-5">
+            <SettingsSection
+              id="workspace"
+              eyebrow="Workspace Mode"
+              title="本地访客模式"
+              description="当前版本不要求登录，研究资产保存在这台设备。"
+            >
+              <SettingRow
+                title="当前身份"
+                description="Guest Workspace，本地历史、导出偏好和 Agent 设置都属于当前浏览器。"
+                action={
+                  <span className="inline-flex h-9 items-center rounded-md border border-emerald-100 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800">
+                    本地工作区
+                  </span>
+                }
+              />
+              <SettingRow
+                title="数据保存位置"
+                description="历史记录使用 localStorage 保存；清理浏览器数据或更换设备后，本地记录不会自动同步。"
+              />
+            </SettingsSection>
             <DimensionSettings
               values={settings.dimensions}
               onChange={updateDimension}
@@ -141,6 +164,29 @@ export default function SettingsPage() {
                 })
               }
             />
+            <SettingsSection
+              id="upgrade"
+              eyebrow="Account Upgrade"
+              title="登录后可升级能力"
+              description="保留未来 SaaS 扩展方向，但不影响当前作品集 Demo 使用。"
+            >
+              <SettingRow
+                title="云端同步历史分析"
+                description="登录后可把本地研究库同步到云端，支持跨设备继续查看和复用。"
+              />
+              <SettingRow
+                title="团队共享研究库"
+                description="支持多人共享赛道研究、机会点卡片和对比结论。"
+              />
+              <SettingRow
+                title="协作标注与报告模板"
+                description="为团队成员提供评论、标注、品牌化导出模板和权限控制。"
+              />
+              <SettingRow
+                title="用户级 API 额度管理"
+                description="按用户或工作区管理模型调用额度、成本统计和默认模型配置。"
+              />
+            </SettingsSection>
           </div>
         </div>
 

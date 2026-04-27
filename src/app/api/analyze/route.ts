@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { scoreOpportunities } from "../../../../lib/opportunity/scoreOpportunities";
+import { consumeOpenAIDailyQuota } from "../../../../lib/quota/openaiDailyQuota";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ const CACHE_TTL_MS = 5 * 60_000;
 type ErrorCode =
   | "INVALID_INPUT"
   | "OPENAI_CONFIG_MISSING"
+  | "OPENAI_DAILY_QUOTA_EXCEEDED"
   | "OPENAI_REQUEST_FAILED"
   | "INVALID_MODEL_OUTPUT";
 
@@ -478,6 +480,17 @@ function getCachedAnalysis(client: OpenAI, query: string, mode: AnalysisMode) {
   return promise;
 }
 
+function getFreshCachedAnalysis(query: string, mode: AnalysisMode) {
+  const cacheKey = `${mode}:${query}`;
+  const cached = analysisCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+
+  return null;
+}
+
 export async function POST(request: Request) {
   let body: unknown;
 
@@ -508,10 +521,42 @@ export async function POST(request: Request) {
   }
 
   const client = getOpenAIClient(apiKey);
+  const mode = getAnalysisMode();
 
   try {
-    const analysis = await getCachedAnalysis(client, query, getAnalysisMode());
-    return NextResponse.json(analysis);
+    const cachedAnalysis = getFreshCachedAnalysis(query, mode);
+
+    if (cachedAnalysis) {
+      return NextResponse.json(await cachedAnalysis);
+    }
+
+    const quota = await consumeOpenAIDailyQuota();
+
+    if (!quota.allowed) {
+      if (quota.reason === "quota_exceeded") {
+        return errorResponse(
+          "OPENAI_DAILY_QUOTA_EXCEEDED",
+          `Daily public OpenAI quota exceeded. Limit is ${quota.limit} analyses per day.`,
+          429,
+        );
+      }
+
+      return errorResponse(
+        "OPENAI_CONFIG_MISSING",
+        "OpenAI daily quota storage is not configured.",
+        500,
+      );
+    }
+
+    const analysis = await getCachedAnalysis(client, query, mode);
+
+    return NextResponse.json(analysis, {
+      headers: {
+        "X-OpenAI-Daily-Quota-Limit": String(quota.limit),
+        "X-OpenAI-Daily-Quota-Remaining": String(quota.remaining),
+        "X-OpenAI-Daily-Quota-Reset": quota.resetAt,
+      },
+    });
   } catch (error) {
     if (error instanceof SyntaxError) {
       return errorResponse(

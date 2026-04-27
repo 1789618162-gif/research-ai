@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import AppTopNav from "@/components/AppTopNav";
 import PageTransitionOverlay from "@/components/PageTransitionOverlay";
 import SearchInput from "@/components/search/search-input";
+import { readStoredHistory } from "../../../lib/history/storage";
 
 const sampleReportHref = `/result?q=${encodeURIComponent("AI 写作工具")}`;
 const transitionMs = 650;
@@ -27,11 +28,18 @@ export default function SearchShell() {
   const router = useRouter();
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isBootLoading, setIsBootLoading] = useState(false);
+  const [historyCount, setHistoryCount] = useState(0);
   const [transitionLabel, setTransitionLabel] = useState("Competition workspace");
 
   useEffect(() => {
+    const countTimer = window.setTimeout(() => {
+      setHistoryCount(readStoredHistory().length);
+    }, 0);
+
     if (!isReloadNavigation()) {
-      return;
+      return () => {
+        window.clearTimeout(countTimer);
+      };
     }
 
     const startTimer = window.setTimeout(() => {
@@ -44,6 +52,7 @@ export default function SearchShell() {
     }, searchBootMs);
 
     return () => {
+      window.clearTimeout(countTimer);
       window.clearTimeout(startTimer);
       window.clearTimeout(endTimer);
     };
@@ -97,7 +106,7 @@ export default function SearchShell() {
 
           <footer
             id="recent-analysis"
-            className="grid gap-3 border-t border-neutral-200 py-5 text-sm text-neutral-500 sm:grid-cols-2"
+            className="grid gap-3 border-t border-neutral-200 py-5 text-sm text-neutral-500 md:grid-cols-3"
           >
             <button
               type="button"
@@ -116,6 +125,16 @@ export default function SearchShell() {
               <span>示例报告</span>
               <span aria-hidden="true">打开</span>
             </Link>
+            <div className="rounded-md px-1 py-2">
+              <span className="block font-semibold text-neutral-700">
+                本地工作区
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-neutral-400">
+                {historyCount > 0
+                  ? `本地已沉淀 ${historyCount} 条研究记录`
+                  : "历史与设置保存在当前浏览器"}
+              </span>
+            </div>
           </footer>
         </section>
       </main>

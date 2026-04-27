@@ -239,7 +239,7 @@ export default function HistoryPageClient({ records }: HistoryPageClientProps) {
               </button>
             </div>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
               <div>
                 <p className="text-sm font-medium uppercase tracking-normal text-emerald-800">
                   Research Archive
@@ -251,11 +251,18 @@ export default function HistoryPageClient({ records }: HistoryPageClientProps) {
                   查看、复用和管理过往研究结果。
                 </p>
               </div>
-              <div className="border-y border-neutral-200 py-4 text-sm text-neutral-500 lg:min-w-64">
+              <div className="border-y border-neutral-200 py-4 text-sm text-neutral-500">
                 <span className="text-2xl font-semibold text-neutral-950">
                   {visibleRecords.length}
                 </span>{" "}
                 条当前记录
+                <p className="mt-3 text-xs leading-5 text-neutral-500">
+                  当前为本地研究库，真实分析结果会自动写入当前浏览器的
+                  localStorage，暂不需要登录。
+                </p>
+                <p className="mt-2 text-xs leading-5 text-neutral-400">
+                  登录后可升级为云端同步、团队共享和跨设备访问。
+                </p>
               </div>
             </div>
           </header>

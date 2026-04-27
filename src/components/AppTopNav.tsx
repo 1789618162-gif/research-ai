@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 type AppTopNavProps = {
   current?: "search" | "history" | "settings" | "compare" | "result";
   actions?: ReactNode;
+  workspaceLabel?: string;
 };
 
 const navItems = [
@@ -14,7 +15,11 @@ const navItems = [
   { key: "settings", label: "Agent 设置", href: "/settings" },
 ] as const;
 
-export default function AppTopNav({ current, actions }: AppTopNavProps) {
+export default function AppTopNav({
+  current,
+  actions,
+  workspaceLabel = "本地工作区",
+}: AppTopNavProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <Link
@@ -54,6 +59,10 @@ export default function AppTopNav({ current, actions }: AppTopNavProps) {
             );
           })}
         </nav>
+
+        <span className="inline-flex h-9 items-center rounded-md border border-emerald-100 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800">
+          {workspaceLabel}
+        </span>
 
         {actions ? (
           <div className="flex flex-wrap items-center gap-2">{actions}</div>
