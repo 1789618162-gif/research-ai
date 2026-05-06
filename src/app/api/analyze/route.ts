@@ -405,33 +405,40 @@ function getAnalysisMode(): AnalysisMode {
 }
 
 function getOpenAIErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const status = "status" in Object(error) ? String(Object(error).status) : "";
+  const code = "code" in Object(error) ? String(Object(error).code) : "";
+  const type = "type" in Object(error) ? String(Object(error).type) : "";
+
   if (
-    error instanceof Error &&
-    (/rate_limit/i.test(error.message) ||
-      ("code" in error && error.code === "rate_limit_exceeded"))
+    status === "401" ||
+    code === "invalid_api_key" ||
+    /invalid_api_key|incorrect api key/i.test(message)
+  ) {
+    return "OpenAI API Key 无效或已过期，请在 Vercel 环境变量中更新 OPENAI_API_KEY 后重新部署。";
+  }
+
+  if (
+    /rate_limit/i.test(message) ||
+    code === "rate_limit_exceeded"
   ) {
     return "OpenAI 账号请求过于频繁，已触发限流。当前页面会展示示例数据，真实分析请稍后重试。";
   }
 
-  if (error instanceof Error && /timed? ?out/i.test(error.message)) {
+  if (/insufficient_quota|billing|quota/i.test(message)) {
+    return "OpenAI 账号额度不足或计费状态不可用。当前页面会展示示例数据，请检查 OpenAI 账户余额和 Billing 设置。";
+  }
+
+  if (/timed? ?out/i.test(message)) {
     return "OpenAI 请求超时。当前页面会展示示例数据；如果使用本地代理，请确认 OPENAI_PROXY_URL 配置正确。";
   }
 
-  if (
-    error instanceof Error &&
-    ("status" in error || "code" in error || "type" in error)
-  ) {
-    const details = [
-      "status" in error ? `status=${String(error.status)}` : null,
-      "code" in error ? `code=${String(error.code)}` : null,
-      "type" in error ? `type=${String(error.type)}` : null,
-    ]
+  if (status || code || type) {
+    const details = [status ? `status=${status}` : null, code ? `code=${code}` : null, type ? `type=${type}` : null]
       .filter(Boolean)
       .join(", ");
 
-    return details
-      ? `OpenAI request failed (${details}): ${error.message}`
-      : `OpenAI request failed: ${error.message}`;
+    return `OpenAI request failed (${details}). 当前页面会展示示例数据，请检查 Vercel 环境变量和 OpenAI 账户状态。`;
   }
 
   return "Failed to generate competitor analysis.";
