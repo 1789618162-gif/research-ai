@@ -9,18 +9,24 @@ type RedisCommandResult<T> = {
 export type DailyQuotaResult =
   | {
       allowed: true;
+      mode: "enabled";
       limit: number;
       used: number;
       remaining: number;
       resetAt: string;
     }
   | {
+      allowed: true;
+      mode: "disabled";
+    }
+  | {
       allowed: false;
+      mode: "enabled";
       limit: number;
       used: number;
       remaining: 0;
       resetAt: string;
-      reason: "quota_exceeded" | "quota_config_missing" | "quota_check_failed";
+      reason: "quota_exceeded";
     };
 
 function getDailyQuotaLimit() {
@@ -87,14 +93,7 @@ export async function consumeOpenAIDailyQuota(): Promise<DailyQuotaResult> {
     !process.env.UPSTASH_REDIS_REST_URL ||
     !process.env.UPSTASH_REDIS_REST_TOKEN
   ) {
-    return {
-      allowed: false,
-      limit,
-      used: 0,
-      remaining: 0,
-      resetAt,
-      reason: "quota_config_missing",
-    };
+    return { allowed: true, mode: "disabled" };
   }
 
   const controller = new AbortController();
@@ -118,6 +117,7 @@ export async function consumeOpenAIDailyQuota(): Promise<DailyQuotaResult> {
     if (used > limit) {
       return {
         allowed: false,
+        mode: "enabled",
         limit,
         used,
         remaining: 0,
@@ -128,20 +128,14 @@ export async function consumeOpenAIDailyQuota(): Promise<DailyQuotaResult> {
 
     return {
       allowed: true,
+      mode: "enabled",
       limit,
       used,
       remaining: Math.max(0, limit - used),
       resetAt,
     };
   } catch {
-    return {
-      allowed: false,
-      limit,
-      used: 0,
-      remaining: 0,
-      resetAt,
-      reason: "quota_check_failed",
-    };
+    return { allowed: true, mode: "disabled" };
   } finally {
     clearTimeout(timeout);
   }

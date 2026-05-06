@@ -28,14 +28,19 @@ npm run dev -- -p 3002
 
 Open [http://localhost:3002](http://localhost:3002).
 
-## Required Environment Variables
+## Environment Variables
 
-For a public deployment with real OpenAI analysis and daily quota protection:
+For a public deployment with real OpenAI analysis:
 
 ```env
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.4-mini
 OPENAI_ENABLE_WEB_SEARCH=false
+```
+
+Optional daily quota protection:
+
+```env
 OPENAI_DAILY_QUOTA=20
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
@@ -44,8 +49,8 @@ UPSTASH_REDIS_REST_TOKEN=
 Notes:
 
 - `OPENAI_API_KEY` must be configured only in Vercel environment variables, never in client code.
-- `OPENAI_DAILY_QUOTA` limits public real analysis requests per day.
-- Upstash Redis stores the daily quota counter across Vercel serverless instances.
+- Upstash Redis is optional. When it is not configured, the app still calls OpenAI without daily quota protection.
+- `OPENAI_DAILY_QUOTA` limits public real analysis requests per day only when Upstash Redis is configured.
 - Keep `OPENAI_ENABLE_WEB_SEARCH=false` for the first public version to reduce cost and rate-limit risk.
 
 ## Deploy To Vercel

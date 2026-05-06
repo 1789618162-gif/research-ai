@@ -533,29 +533,28 @@ export async function POST(request: Request) {
     const quota = await consumeOpenAIDailyQuota();
 
     if (!quota.allowed) {
-      if (quota.reason === "quota_exceeded") {
-        return errorResponse(
-          "OPENAI_DAILY_QUOTA_EXCEEDED",
-          `Daily public OpenAI quota exceeded. Limit is ${quota.limit} analyses per day.`,
-          429,
-        );
-      }
-
       return errorResponse(
-        "OPENAI_CONFIG_MISSING",
-        "OpenAI daily quota storage is not configured.",
-        500,
+        "OPENAI_DAILY_QUOTA_EXCEEDED",
+        `Daily public OpenAI quota exceeded. Limit is ${quota.limit} analyses per day.`,
+        429,
       );
     }
 
     const analysis = await getCachedAnalysis(client, query, mode);
+    const quotaHeaders: Record<string, string> =
+      quota.mode === "enabled"
+        ? {
+            "X-OpenAI-Daily-Quota-Mode": "enabled",
+            "X-OpenAI-Daily-Quota-Limit": String(quota.limit),
+            "X-OpenAI-Daily-Quota-Remaining": String(quota.remaining),
+            "X-OpenAI-Daily-Quota-Reset": quota.resetAt,
+          }
+        : {
+            "X-OpenAI-Daily-Quota-Mode": "disabled",
+          };
 
     return NextResponse.json(analysis, {
-      headers: {
-        "X-OpenAI-Daily-Quota-Limit": String(quota.limit),
-        "X-OpenAI-Daily-Quota-Remaining": String(quota.remaining),
-        "X-OpenAI-Daily-Quota-Reset": quota.resetAt,
-      },
+      headers: quotaHeaders,
     });
   } catch (error) {
     if (error instanceof SyntaxError) {
