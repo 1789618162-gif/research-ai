@@ -14,6 +14,7 @@ export const runtime = "nodejs";
 const MAX_QUERY_LENGTH = 120;
 const DEFAULT_MODEL = "gpt-5.4-mini";
 const OPENAI_TIMEOUT_MS = 120_000;
+const DASHSCOPE_WEB_SEARCH_TIMEOUT_MS = 120_000;
 const CACHE_TTL_MS = 5 * 60_000;
 
 type ErrorCode =
@@ -352,7 +353,12 @@ async function createAnalysis(
       } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
         enable_search: boolean;
       }),
-      { timeout: mode === "web_search" ? 30_000 : OPENAI_TIMEOUT_MS },
+      {
+        timeout:
+          mode === "web_search"
+            ? DASHSCOPE_WEB_SEARCH_TIMEOUT_MS
+            : OPENAI_TIMEOUT_MS,
+      },
     );
   }
 
@@ -414,7 +420,7 @@ function getOpenAIErrorMessage(error: unknown) {
   }
 
   if (/timed? ?out/i.test(message)) {
-    return "OpenAI 请求超时。当前页面会展示示例数据；如果使用本地代理，请确认 OPENAI_PROXY_URL 配置正确。";
+    return "AI 请求超时。当前页面会展示示例数据；如果使用 DashScope 联网搜索，请稍后重试或暂时关闭 QWEN_ENABLE_SEARCH。";
   }
 
   if (status || code || type) {
