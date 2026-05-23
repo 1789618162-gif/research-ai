@@ -394,6 +394,10 @@ function getAnalysisMode(config: AiConfig): AnalysisMode {
   return config.enableWebSearch ? "web_search" : "model_only";
 }
 
+function isTimeoutError(error: unknown) {
+  return error instanceof Error && /timed? ?out/i.test(error.message);
+}
+
 function getOpenAIErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   const status = "status" in Object(error) ? String(Object(error).status) : "";
@@ -503,6 +507,27 @@ function getFreshCachedAnalysis(query: string, mode: AnalysisMode) {
   return null;
 }
 
+async function getAnalysisWithSearchFallback(
+  client: OpenAI,
+  config: AiConfig,
+  query: string,
+  mode: AnalysisMode,
+) {
+  try {
+    return await getCachedAnalysis(client, config, query, mode);
+  } catch (error) {
+    if (
+      config.provider === "dashscope" &&
+      mode === "web_search" &&
+      isTimeoutError(error)
+    ) {
+      return getCachedAnalysis(client, config, query, "model_only");
+    }
+
+    throw error;
+  }
+}
+
 export async function POST(request: Request) {
   let body: unknown;
 
@@ -552,7 +577,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const analysis = await getCachedAnalysis(client, config, query, mode);
+    const analysis = await getAnalysisWithSearchFallback(
+      client,
+      config,
+      query,
+      mode,
+    );
     const quotaHeaders: Record<string, string> =
       quota.mode === "enabled"
         ? {
