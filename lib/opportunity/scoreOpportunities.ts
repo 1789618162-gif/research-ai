@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import OpenAI from "openai";
-import { ProxyAgent, fetch as undiciFetch } from "undici";
+import {
+  createAiClient,
+  getAiConfig,
+  getAiConfigMissingMessage,
+} from "../ai/provider";
 import {
   OpportunityScoringOutputSchema,
   type CompetitorInput,
@@ -62,41 +65,6 @@ type ScorableOpportunity = {
 };
 
 type ScoreFields = Omit<OpportunityScoreItem, "opportunity_title">;
-
-function getOpenAIClient(apiKey: string) {
-  const proxyUrl =
-    process.env.OPENAI_PROXY_URL ||
-    process.env.HTTPS_PROXY ||
-    process.env.HTTP_PROXY;
-
-  if (!proxyUrl) {
-    return new OpenAI({
-      apiKey,
-      timeout: OPENAI_TIMEOUT_MS,
-      maxRetries: 0,
-    });
-  }
-
-  const dispatcher = new ProxyAgent(proxyUrl);
-  const proxiedFetch: typeof fetch = (async (url, init) => {
-    const response = await undiciFetch(
-      url as Parameters<typeof undiciFetch>[0],
-      {
-        ...init,
-        dispatcher,
-      } as Parameters<typeof undiciFetch>[1],
-    );
-
-    return response as unknown as Response;
-  }) as typeof fetch;
-
-  return new OpenAI({
-    apiKey,
-    timeout: OPENAI_TIMEOUT_MS,
-    maxRetries: 0,
-    fetch: proxiedFetch,
-  });
-}
 
 async function loadScorerPrompt() {
   return readFile(
@@ -226,16 +194,39 @@ function mergeScores<T extends ScorableOpportunity>(
 async function requestModelScores<T extends ScorableOpportunity>(
   input: ScoreOpportunitiesInput<T>,
 ) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const config = getAiConfig(DEFAULT_MODEL);
 
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+  if (!config) {
+    throw new Error(getAiConfigMissingMessage());
   }
 
   const prompt = await loadScorerPrompt();
-  const client = getOpenAIClient(apiKey);
+  const client = createAiClient(config, OPENAI_TIMEOUT_MS);
+
+  if (config.provider === "dashscope") {
+    const response = await client.chat.completions.create({
+      model: config.model,
+      messages: [
+        {
+          role: "user",
+          content: [prompt, "", JSON.stringify(input, null, 2)].join("\n"),
+        },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 3000,
+    });
+    const parsed = parseJson(response.choices[0]?.message?.content ?? "");
+    const result = OpportunityScoringOutputSchema.safeParse(parsed);
+
+    if (!result.success) {
+      throw new Error("Scoring output did not match the expected schema.");
+    }
+
+    return result.data.scores;
+  }
+
   const response = await client.responses.create({
-    model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
+    model: config.model,
     input: [
       prompt,
       "",

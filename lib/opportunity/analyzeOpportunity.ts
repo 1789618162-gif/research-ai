@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import OpenAI from "openai";
-import { ProxyAgent, fetch as undiciFetch } from "undici";
+import {
+  createAiClient,
+  getAiConfig,
+  getAiConfigMissingMessage,
+} from "../ai/provider";
 import {
   OpportunityAnalysisInputSchema,
   OpportunityAnalysisOutputSchema,
@@ -35,46 +38,6 @@ export class OpportunityAnalysisError extends Error {
     this.code = code;
     this.status = status;
   }
-}
-
-function getOpenAIClient(apiKey: string) {
-  const proxyUrl =
-    process.env.OPENAI_PROXY_URL ||
-    process.env.HTTPS_PROXY ||
-    process.env.HTTP_PROXY;
-
-  if (!proxyUrl) {
-    return new OpenAI({
-      apiKey,
-      timeout: OPENAI_TIMEOUT_MS,
-      maxRetries: 0,
-    });
-  }
-
-  /**
-   * Local development may depend on an HTTP proxy. The official SDK accepts a
-   * custom fetch implementation, so we route requests through undici's
-   * ProxyAgent when OPENAI_PROXY_URL / HTTPS_PROXY / HTTP_PROXY exists.
-   */
-  const dispatcher = new ProxyAgent(proxyUrl);
-  const proxiedFetch: typeof fetch = (async (url, init) => {
-    const response = await undiciFetch(
-      url as Parameters<typeof undiciFetch>[0],
-      {
-        ...init,
-        dispatcher,
-      } as Parameters<typeof undiciFetch>[1],
-    );
-
-    return response as unknown as Response;
-  }) as typeof fetch;
-
-  return new OpenAI({
-    apiKey,
-    timeout: OPENAI_TIMEOUT_MS,
-    maxRetries: 0,
-    fetch: proxiedFetch,
-  });
 }
 
 async function loadPrompt(filename: string) {
@@ -210,36 +173,47 @@ export async function analyzeOpportunity(
     );
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const config = getAiConfig(DEFAULT_MODEL);
 
-  if (!apiKey) {
+  if (!config) {
     throw new OpportunityAnalysisError(
       "OPENAI_CONFIG_MISSING",
-      "OPENAI_API_KEY is not configured.",
+      getAiConfigMissingMessage(),
       500,
     );
   }
 
   const input = inputResult.data;
-  const client = getOpenAIClient(apiKey);
+  const client = createAiClient(config, OPENAI_TIMEOUT_MS);
   const prompt = await buildPrompt(input);
 
   let outputText = "";
 
   try {
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-      input: prompt,
-      reasoning: { effort: "medium" },
-      max_output_tokens: 5000,
-      text: {
-        verbosity: "low",
-        format: { type: "json_object" },
-      },
-      store: false,
-    });
+    if (config.provider === "dashscope") {
+      const response = await client.chat.completions.create({
+        model: config.model,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 5000,
+      });
 
-    outputText = response.output_text;
+      outputText = response.choices[0]?.message?.content ?? "";
+    } else {
+      const response = await client.responses.create({
+        model: config.model,
+        input: prompt,
+        reasoning: { effort: "medium" },
+        max_output_tokens: 5000,
+        text: {
+          verbosity: "low",
+          format: { type: "json_object" },
+        },
+        store: false,
+      });
+
+      outputText = response.output_text;
+    }
   } catch (error) {
     throw new OpportunityAnalysisError(
       "OPENAI_REQUEST_FAILED",

@@ -311,6 +311,10 @@ function historySnapshotNotice(isDemo: boolean) {
 
 function getErrorMessage(error: ApiError) {
   if (error.error?.code === "OPENAI_CONFIG_MISSING") {
+    return "还没有配置 DASHSCOPE_API_KEY 或 OPENAI_API_KEY。请配置后重新部署或重启开发服务器。";
+  }
+
+  if (error.error?.code === "OPENAI_CONFIG_MISSING") {
     return "还没有配置 OPENAI_API_KEY。请在 .env.local 中配置后重启开发服务器。";
   }
 

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { ProxyAgent, fetch as undiciFetch } from "undici";
+import {
+  createAiClient,
+  getAiConfig,
+  getAiConfigMissingMessage,
+  type AiConfig,
+} from "../../../../lib/ai/provider";
 import { scoreOpportunities } from "../../../../lib/opportunity/scoreOpportunities";
 import { consumeOpenAIDailyQuota } from "../../../../lib/quota/openaiDailyQuota";
 
@@ -332,12 +337,28 @@ function buildPrompt(query: string, mode: AnalysisMode) {
 
 async function createAnalysis(
   client: OpenAI,
+  config: AiConfig,
   query: string,
   mode: AnalysisMode,
 ) {
+  if (config.provider === "dashscope") {
+    return client.chat.completions.create(
+      ({
+        model: config.model,
+        messages: [{ role: "user", content: buildPrompt(query, mode) }],
+        enable_search: mode === "web_search",
+        response_format: { type: "json_object" },
+        max_tokens: 6000,
+      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+        enable_search: boolean;
+      }),
+      { timeout: mode === "web_search" ? 30_000 : OPENAI_TIMEOUT_MS },
+    );
+  }
+
   return client.responses.create(
     {
-      model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
+      model: config.model,
       input: buildPrompt(query, mode),
       ...(mode === "web_search"
         ? {
@@ -363,45 +384,8 @@ async function createAnalysis(
   );
 }
 
-function getOpenAIClient(apiKey: string) {
-  const proxyUrl =
-    process.env.OPENAI_PROXY_URL ||
-    process.env.HTTPS_PROXY ||
-    process.env.HTTP_PROXY;
-
-  if (!proxyUrl) {
-    return new OpenAI({
-      apiKey,
-      timeout: OPENAI_TIMEOUT_MS,
-      maxRetries: 0,
-    });
-  }
-
-  const dispatcher = new ProxyAgent(proxyUrl);
-  const proxiedFetch: typeof fetch = (async (url, init) => {
-    const response = await undiciFetch(
-      url as Parameters<typeof undiciFetch>[0],
-      {
-        ...init,
-        dispatcher,
-      } as Parameters<typeof undiciFetch>[1],
-    );
-
-    return response as unknown as Response;
-  }) as typeof fetch;
-
-  return new OpenAI({
-    apiKey,
-    timeout: OPENAI_TIMEOUT_MS,
-    maxRetries: 0,
-    fetch: proxiedFetch,
-  });
-}
-
-function getAnalysisMode(): AnalysisMode {
-  return process.env.OPENAI_ENABLE_WEB_SEARCH === "true"
-    ? "web_search"
-    : "model_only";
+function getAnalysisMode(config: AiConfig): AnalysisMode {
+  return config.enableWebSearch ? "web_search" : "model_only";
 }
 
 function getOpenAIErrorMessage(error: unknown) {
@@ -444,13 +428,23 @@ function getOpenAIErrorMessage(error: unknown) {
   return "Failed to generate competitor analysis.";
 }
 
+function getResponseText(response: Awaited<ReturnType<typeof createAnalysis>>) {
+  if ("output_text" in response) {
+    return response.output_text;
+  }
+
+  return response.choices[0]?.message?.content ?? "";
+}
+
 async function generateAnalysis(
   client: OpenAI,
+  config: AiConfig,
   query: string,
   mode: AnalysisMode,
 ) {
-  const response = await createAnalysis(client, query, mode);
-  const analysis = JSON.parse(response.output_text) as unknown;
+  const response = await createAnalysis(client, config, query, mode);
+  const outputText = getResponseText(response);
+  const analysis = JSON.parse(outputText ?? "") as unknown;
 
   if (!hasAnalysisShape(analysis)) {
     throw new Error("Model output did not match the expected analysis structure.");
@@ -465,7 +459,12 @@ async function generateAnalysis(
   };
 }
 
-function getCachedAnalysis(client: OpenAI, query: string, mode: AnalysisMode) {
+function getCachedAnalysis(
+  client: OpenAI,
+  config: AiConfig,
+  query: string,
+  mode: AnalysisMode,
+) {
   const now = Date.now();
   const cacheKey = `${mode}:${query}`;
   const cached = analysisCache.get(cacheKey);
@@ -474,7 +473,7 @@ function getCachedAnalysis(client: OpenAI, query: string, mode: AnalysisMode) {
     return cached.promise;
   }
 
-  const promise = generateAnalysis(client, query, mode).catch((error) => {
+  const promise = generateAnalysis(client, config, query, mode).catch((error) => {
     analysisCache.delete(cacheKey);
     throw error;
   });
@@ -517,18 +516,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const config = getAiConfig(DEFAULT_MODEL);
 
-  if (!apiKey) {
+  if (!config) {
     return errorResponse(
       "OPENAI_CONFIG_MISSING",
-      "OPENAI_API_KEY is not configured.",
+      getAiConfigMissingMessage(),
       500,
     );
   }
 
-  const client = getOpenAIClient(apiKey);
-  const mode = getAnalysisMode();
+  const client = createAiClient(config, OPENAI_TIMEOUT_MS);
+  const mode = getAnalysisMode(config);
 
   try {
     const cachedAnalysis = getFreshCachedAnalysis(query, mode);
@@ -547,7 +546,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const analysis = await getCachedAnalysis(client, query, mode);
+    const analysis = await getCachedAnalysis(client, config, query, mode);
     const quotaHeaders: Record<string, string> =
       quota.mode === "enabled"
         ? {
