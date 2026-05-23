@@ -293,7 +293,89 @@ function hasAnalysisShape(value: unknown): value is CompetitorAnalysis {
   );
 }
 
+function unwrapAnalysisOutput(value: unknown): unknown {
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  for (const key of ["analysis", "result", "data"]) {
+    const nested = value[key];
+
+    if (hasAnalysisShape(nested)) {
+      return nested;
+    }
+  }
+
+  return value;
+}
+
+function buildStrictPrompt(query: string, mode: AnalysisMode) {
+  const sourceInstruction =
+    mode === "web_search"
+      ? "优先基于联网搜索获得的当前公开信息；公开信息不足时，请在 evidence 中标注“基于公开信息推断”。"
+      : "本次未使用实时联网搜索；请基于模型知识和公开信息推断，并在 evidence 中标注“基于模型知识和公开信息推断”。";
+
+  return `
+你是一个高级 AI 产品战略分析 Agent，负责生成结构化竞品分析和可执行产品机会点。
+
+输入对象：${query}
+信息来源要求：${sourceInstruction}
+
+请先判断输入是“赛道”还是“产品名”，再选择 3-6 个最相关竞品进行分析。
+
+必须只返回一个 JSON object，不要返回 Markdown、解释文字或代码块。
+顶层 JSON 必须且只能包含这些字段：
+- competitors: array，3-6 个竞品
+- featureComparison: array，3-6 个功能维度
+- userScenarios: array，2-5 个用户场景
+- differentiationAnalysis: array，3-5 个差异化维度
+- opportunities: array，5-8 个机会点
+
+competitors 每项必须包含：
+name, product_name, category, positioning, core_features, target_users,
+key_scenarios, pricing, workflow_depth, automation_level, agent_capability,
+collaboration_support, strengths, weaknesses, evidence。
+
+字段规则：
+- name 必须等于 product_name。
+- core_features、target_users、key_scenarios、strengths、weaknesses、evidence 都必须是字符串数组。
+- workflow_depth、automation_level、agent_capability、collaboration_support 只能是 low / medium / high。
+- pricing 不确定时写“未公开 / 基于公开信息推断”。
+
+featureComparison 每项必须包含：
+feature, importance, comparison。
+importance 只能是 high / medium / low。
+comparison 必须是数组，每项包含 competitor, performance, notes。
+
+userScenarios 每项必须包含：
+scenario, userType, painPoints, currentAlternatives。
+painPoints 和 currentAlternatives 必须是字符串数组。
+
+differentiationAnalysis 每项必须包含：
+dimension, currentPattern, gaps, implications。
+gaps 必须是字符串数组。
+
+opportunities 每项必须包含：
+opportunity_title, gap_type, evidence, unmet_need, why_now,
+product_direction, priority, priority_reason, mvp_idea。
+gap_type 只能是 用户 / 场景 / 流程 / agent / 商业化。
+priority 只能是 High / Medium / Low。
+
+机会点要求：
+- 优先输出 AI Agent 工作流、自动化执行、复杂任务拆解相关方向。
+- evidence 必须点名相关竞品或对比维度。
+- 如果证据不足，evidence 写“证据不足：基于公开信息推断”。
+- 所有内容用中文，字段名保持英文。
+`.trim();
+}
+
 function buildPrompt(query: string, mode: AnalysisMode) {
+  const strictPrompt = buildStrictPrompt(query, mode);
+
+  if (strictPrompt) {
+    return strictPrompt;
+  }
+
   const sourceInstruction =
     mode === "web_search"
       ? "请优先基于 Web search 获取的当前公开信息；如果公开信息不足，请明确标注“基于公开信息推断”。"
@@ -454,7 +536,7 @@ async function generateAnalysis(
 ) {
   const response = await createAnalysis(client, config, query, mode);
   const outputText = getResponseText(response);
-  const analysis = JSON.parse(outputText ?? "") as unknown;
+  const analysis = unwrapAnalysisOutput(JSON.parse(outputText ?? ""));
 
   if (!hasAnalysisShape(analysis)) {
     throw new Error("Model output did not match the expected analysis structure.");
