@@ -309,6 +309,338 @@ function unwrapAnalysisOutput(value: unknown): unknown {
   return value;
 }
 
+function getArrayField(
+  value: Record<string, unknown>,
+  keys: string[],
+): unknown[] {
+  for (const key of keys) {
+    const field = value[key];
+
+    if (Array.isArray(field)) {
+      return field;
+    }
+  }
+
+  return [];
+}
+
+function getStringField(value: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const field = value[key];
+
+    if (typeof field === "string" && field.trim()) {
+      return field.trim();
+    }
+  }
+
+  return "";
+}
+
+function getCapability(value: string): CapabilityLevel {
+  return value === "low" || value === "medium" || value === "high"
+    ? value
+    : "medium";
+}
+
+function toStringArray(value: unknown, fallback: string[] = []) {
+  if (Array.isArray(value)) {
+    const strings = value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+
+    return strings.length > 0 ? strings : fallback;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+
+  return fallback;
+}
+
+function normalizeCompetitors(rawItems: unknown[], query: string) {
+  const competitors = rawItems
+    .filter(isPlainObject)
+    .map((item, index) => {
+      const name =
+        getStringField(item, ["product_name", "productName", "name", "title"]) ||
+        `${query} 相关竞品 ${index + 1}`;
+
+      return {
+        name,
+        product_name: name,
+        category:
+          getStringField(item, ["category", "type", "segment"]) ||
+          "AI 产品",
+        positioning:
+          getStringField(item, ["positioning", "position", "description"]) ||
+          "基于模型输出整理的产品定位。",
+        core_features: toStringArray(item.core_features ?? item.coreFeatures, [
+          "核心功能待进一步核实",
+        ]),
+        target_users: toStringArray(item.target_users ?? item.targetUsers, [
+          "目标用户待进一步核实",
+        ]),
+        key_scenarios: toStringArray(item.key_scenarios ?? item.keyScenarios, [
+          "关键场景待进一步核实",
+        ]),
+        pricing:
+          getStringField(item, ["pricing", "price", "business_model"]) ||
+          "未公开 / 基于公开信息推断",
+        workflow_depth: getCapability(String(item.workflow_depth ?? item.workflowDepth ?? "")),
+        automation_level: getCapability(String(item.automation_level ?? item.automationLevel ?? "")),
+        agent_capability: getCapability(String(item.agent_capability ?? item.agentCapability ?? "")),
+        collaboration_support: getCapability(String(item.collaboration_support ?? item.collaborationSupport ?? "")),
+        strengths: toStringArray(item.strengths, ["优势待进一步核实"]),
+        weaknesses: toStringArray(item.weaknesses, ["弱点待进一步核实"]),
+        evidence: toStringArray(item.evidence, [
+          "证据不足：基于模型输出和公开信息推断",
+        ]),
+      };
+    });
+
+  return competitors.length > 0
+    ? competitors
+    : [
+        {
+          name: query,
+          product_name: query,
+          category: "AI 产品",
+          positioning: "模型未返回完整竞品结构，使用输入对象生成兜底分析。",
+          core_features: ["核心功能待进一步核实"],
+          target_users: ["目标用户待进一步核实"],
+          key_scenarios: ["关键场景待进一步核实"],
+          pricing: "未公开 / 基于公开信息推断",
+          workflow_depth: "medium" as const,
+          automation_level: "medium" as const,
+          agent_capability: "medium" as const,
+          collaboration_support: "medium" as const,
+          strengths: ["优势待进一步核实"],
+          weaknesses: ["弱点待进一步核实"],
+          evidence: ["证据不足：模型返回结构不完整"],
+        },
+      ];
+}
+
+function normalizeFeatureComparison(
+  rawItems: unknown[],
+  competitors: CompetitorAnalysis["competitors"],
+) {
+  const normalized = rawItems.filter(isPlainObject).map((item) => ({
+    feature:
+      getStringField(item, ["feature", "dimension", "name"]) ||
+      "核心能力",
+    importance:
+      getStringField(item, ["importance", "priority"]) === "low"
+        ? "low"
+        : getStringField(item, ["importance", "priority"]) === "medium"
+          ? "medium"
+          : "high",
+    comparison:
+      getArrayField(item, ["comparison", "comparisons", "items"])
+        .filter(isPlainObject)
+        .map((entry) => ({
+          competitor:
+            getStringField(entry, ["competitor", "product", "name"]) ||
+            competitors[0].product_name,
+          performance:
+            getStringField(entry, ["performance", "level", "score"]) ||
+            "待核实",
+          notes:
+            getStringField(entry, ["notes", "note", "summary"]) ||
+            "基于模型输出整理。",
+        })),
+  }));
+
+  return normalized.length > 0
+    ? normalized.map((item) => ({
+        ...item,
+        comparison:
+          item.comparison.length > 0
+            ? item.comparison
+            : competitors.map((competitor) => ({
+                competitor: competitor.product_name,
+                performance: competitor.agent_capability,
+                notes: "基于能力字段自动补全。",
+              })),
+      }))
+    : [
+        {
+          feature: "Agent 能力",
+          importance: "high" as const,
+          comparison: competitors.map((competitor) => ({
+            competitor: competitor.product_name,
+            performance: competitor.agent_capability,
+            notes: "基于 agent_capability 字段自动补全。",
+          })),
+        },
+      ];
+}
+
+function normalizeUserScenarios(rawItems: unknown[]) {
+  const scenarios = rawItems.filter(isPlainObject).map((item) => ({
+    scenario:
+      getStringField(item, ["scenario", "name", "title"]) ||
+      "AI 辅助完成复杂任务",
+    userType:
+      getStringField(item, ["userType", "user_type", "user"]) ||
+      "目标用户",
+    painPoints: toStringArray(item.painPoints ?? item.pain_points, [
+      "需要在多个工具之间切换",
+    ]),
+    currentAlternatives: toStringArray(
+      item.currentAlternatives ?? item.current_alternatives,
+      ["手动搜索、表格整理、通用聊天工具"],
+    ),
+  }));
+
+  return scenarios.length > 0
+    ? scenarios
+    : [
+        {
+          scenario: "AI 辅助完成复杂任务",
+          userType: "目标用户",
+          painPoints: ["需要在多个工具之间切换"],
+          currentAlternatives: ["手动搜索、表格整理、通用聊天工具"],
+        },
+      ];
+}
+
+function normalizeDifferentiation(rawItems: unknown[]) {
+  const items = rawItems.filter(isPlainObject).map((item) => ({
+    dimension:
+      getStringField(item, ["dimension", "name", "title"]) ||
+      "工作流深度",
+    currentPattern:
+      getStringField(item, ["currentPattern", "current_pattern", "pattern"]) ||
+      "多数产品仍以单点功能或通用助手为主。",
+    gaps: toStringArray(item.gaps, ["跨工具自动化和结果可解释性仍有缺口"]),
+    implications:
+      getStringField(item, ["implications", "implication", "insight"]) ||
+      "可以通过更完整的 Agent 工作流形成差异化。",
+  }));
+
+  return items.length > 0
+    ? items
+    : [
+        {
+          dimension: "工作流深度",
+          currentPattern: "多数产品仍以单点功能或通用助手为主。",
+          gaps: ["跨工具自动化和结果可解释性仍有缺口"],
+          implications: "可以通过更完整的 Agent 工作流形成差异化。",
+        },
+      ];
+}
+
+function normalizeOpportunities(rawItems: unknown[], query: string) {
+  const opportunities = rawItems.filter(isPlainObject).map((item) => ({
+    opportunity_title:
+      getStringField(item, ["opportunity_title", "title", "name"]) ||
+      `${query} 的 Agent 工作流机会`,
+    gap_type:
+      getStringField(item, ["gap_type", "gapType", "type"]) || "agent",
+    evidence:
+      getStringField(item, ["evidence", "reason", "proof"]) ||
+      "证据不足：基于模型输出和公开信息推断",
+    unmet_need:
+      getStringField(item, ["unmet_need", "unmetNeed", "need"]) ||
+      "用户需要更低成本地完成信息收集、比较和决策。",
+    why_now:
+      getStringField(item, ["why_now", "whyNow"]) ||
+      "大模型和工具调用能力降低了自动化分析的实现门槛。",
+    product_direction:
+      getStringField(item, ["product_direction", "productDirection", "direction"]) ||
+      "构建面向具体任务的 Agent 分析工作流。",
+    priority:
+      getStringField(item, ["priority"]) === "Low"
+        ? "Low"
+        : getStringField(item, ["priority"]) === "Medium"
+          ? "Medium"
+          : "High",
+    priority_reason:
+      getStringField(item, ["priority_reason", "priorityReason"]) ||
+      "用户价值明确，适合作为 MVP 方向验证。",
+    mvp_idea:
+      getStringField(item, ["mvp_idea", "mvpIdea", "mvp"]) ||
+      "先实现输入关键词后自动生成结构化竞品分析。",
+  }));
+
+  return opportunities.length > 0
+    ? opportunities
+    : [
+        {
+          opportunity_title: `${query} 的 Agent 工作流机会`,
+          gap_type: "agent",
+          evidence: "证据不足：模型返回结构不完整",
+          unmet_need: "用户需要更低成本地完成信息收集、比较和决策。",
+          why_now: "大模型和工具调用能力降低了自动化分析的实现门槛。",
+          product_direction: "构建面向具体任务的 Agent 分析工作流。",
+          priority: "Medium" as const,
+          priority_reason: "适合作为 MVP 方向验证。",
+          mvp_idea: "先实现输入关键词后自动生成结构化竞品分析。",
+        },
+      ];
+}
+
+function normalizeAnalysisOutput(
+  value: unknown,
+  query: string,
+): CompetitorAnalysis | unknown {
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const competitors = normalizeCompetitors(
+    getArrayField(value, [
+      "competitors",
+      "products",
+      "productAnalysis",
+      "competitorAnalysis",
+      "competitor_analysis",
+    ]),
+    query,
+  );
+
+  return {
+    competitors,
+    featureComparison: normalizeFeatureComparison(
+      getArrayField(value, [
+        "featureComparison",
+        "feature_comparison",
+        "features",
+        "comparison",
+        "featureMatrix",
+      ]),
+      competitors,
+    ),
+    userScenarios: normalizeUserScenarios(
+      getArrayField(value, [
+        "userScenarios",
+        "user_scenarios",
+        "scenarios",
+        "useCases",
+      ]),
+    ),
+    differentiationAnalysis: normalizeDifferentiation(
+      getArrayField(value, [
+        "differentiationAnalysis",
+        "differentiation_analysis",
+        "differentiation",
+        "positioning",
+      ]),
+    ),
+    opportunities: normalizeOpportunities(
+      getArrayField(value, [
+        "opportunities",
+        "opportunity_points",
+        "opportunityPoints",
+        "insights",
+      ]),
+      query,
+    ),
+  };
+}
+
 function buildStrictPrompt(query: string, mode: AnalysisMode) {
   const sourceInstruction =
     mode === "web_search"
@@ -536,7 +868,10 @@ async function generateAnalysis(
 ) {
   const response = await createAnalysis(client, config, query, mode);
   const outputText = getResponseText(response);
-  const analysis = unwrapAnalysisOutput(JSON.parse(outputText ?? ""));
+  const analysis = normalizeAnalysisOutput(
+    unwrapAnalysisOutput(JSON.parse(outputText ?? "")),
+    query,
+  );
 
   if (!hasAnalysisShape(analysis)) {
     throw new Error("Model output did not match the expected analysis structure.");
